@@ -113,12 +113,16 @@ struct Board {
 
     std::vector<Move> generate_legal_moves(int player_id, bool is_first_move) {
         std::vector<Move> legal_moves;
+        legal_moves.reserve(500); // 事前にメモリ確保
         Player& player = players[player_id];
 
         std::vector<int> player_bits;
-        for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
-            if (cells[player_id][bit_pos]) {
-                player_bits.push_back(bit_pos);
+        if (!is_first_move) {
+            player_bits.reserve(100); // 事前にメモリ確保
+            for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+                if (cells[player_id][bit_pos]) {
+                    player_bits.push_back(bit_pos);
+                }
             }
         }
         // std::cerr << "player bits" << std::endl;
@@ -133,10 +137,12 @@ struct Board {
                 continue;
             }
             
-            std::unordered_set<int> possible_positions;
             if (is_first_move) {
+                // 初手の場合は全位置をチェックするが、unordered_setを使わず直接チェック
                 for (int pos = 0; pos < BOARD_BIT_SIZE; ++pos) {
-                    possible_positions.insert(pos);
+                    if (puttable_first(mino, pos, player_id)) {
+                        legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
+                    }
                 }
             } else {
                 std::vector<int> &corner_bits = all_minos_corner_bits[mino_index];
@@ -146,32 +152,35 @@ struct Board {
                 // }
                 // std::cerr << "\n";
                 
+                // 重複を避けるためのvectorとソート（unordered_setより高速）
+                std::vector<int> possible_positions;
+                possible_positions.reserve(player_bits.size() * corner_bits.size());
+                
                 // すべてのiとjに対してplayer_bits[i] - corner_bits[j]が0以上であるときpossible_positionsに追加
                 for (size_t i = 0; i < player_bits.size(); ++i) {
                     for (size_t j = 0; j < corner_bits.size(); ++j) {
                         int pos = player_bits[i] - corner_bits[j];
                         if (pos >= 0) {
-                            possible_positions.insert(pos);
+                            possible_positions.push_back(pos);
                         }
                     }
                 }
                 // std::cerr << possible_positions.size() << std::endl;
-            }
-
-            // for (int pos = 0; pos <= BOARD_BIT_SIZE; ++pos) {
-            for (int pos: possible_positions) {
-                if (is_first_move) {
-                    if (puttable_first(mino, pos, player_id)) {
-                        legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
-                    }
-                } else {
+                
+                // ソートして重複除去
+                std::sort(possible_positions.begin(), possible_positions.end());
+                auto last = std::unique(possible_positions.begin(), possible_positions.end());
+                possible_positions.erase(last, possible_positions.end());
+                
+                // 各候補位置をチェック
+                for (int pos : possible_positions) {
                     if (puttable(mino, pos, player_id)) {
                         legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
                     }
                 }
             }
 
-            // debugging...
+            // debugging...　DO NOT REMOVE
             // for (int pos = 0; pos <= BOARD_BIT_SIZE; ++pos) {
             //     if (is_first_move) {
             //         if (puttable_first(mino, pos, player_id)) {
