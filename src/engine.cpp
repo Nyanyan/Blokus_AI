@@ -1,5 +1,9 @@
 #include "board.hpp"
+#include <chrono>
 
+inline uint64_t tim() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+}
 
 
 
@@ -25,6 +29,7 @@ Move get_best_move(Board& board, int player_id) {
     for (auto& move : legal_moves) {
         move.mcts_score = 0.0;
         move.n_tried = 0;
+        uint64_t strt = tim();
         for (int i = 0; i < n_try_per_move; ++i) {
             Board sim_board = board;
             sim_board.put_mino(player_id, move);
@@ -34,7 +39,7 @@ Move get_best_move(Board& board, int player_id) {
             move.n_tried++;
         }
         move.mcts_score /= static_cast<double>(move.n_tried);
-        std::cerr << "Move at (" << move.top << ", " << move.left << ") with mino " << move.mino_index << " has MC score: " << move.mcts_score << " after " << move.n_tried << " trials.\n";
+        std::cerr << "Move at (" << move.top << ", " << move.left << ") with mino " << move.mino_index << " has MC score: " << move.mcts_score << " after " << move.n_tried << " trials. elapsed " << (tim() - strt) << " ms (" << (tim() - strt) / move.n_tried << " ms/it)\n";
     }
     // 最もスコアの高い手を選択
     Move* best_move = &legal_moves[0];
@@ -53,7 +58,7 @@ int main() {
     init_unique_minos();
     init_all_minos();
 
-    int ai_player_id = 1;
+    int ai_player_id = 0;
     int start_player_id = 0;
 
     Board board;
