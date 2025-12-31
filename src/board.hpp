@@ -20,7 +20,7 @@ struct Player {
 constexpr int MINO_IDX_PASS = -1;
 
 struct Move {
-    int place; // 左シフト数
+    int pos; // 左シフト数
     int mino_index;
     double mcts_score;
     int n_tried;
@@ -62,15 +62,29 @@ struct Board {
         std::bitset<BOARD_BIT_SIZE> corner;
         int corner_idx = corner_positions[player_id][0] * BOARD_WITH_WALL_SIZE + corner_positions[player_id][1];
         corner.set(corner_idx);
+        // if (player_id != 0) {
+        //     std::cerr << corner.to_string() << std::endl;
+        // }
 
         if (!mino.shiftable_left(pos)) { // シフトできない
+            // if (player_id != 0) {
+            //     std::cerr << "not shiftable " << pos << std::endl;
+            //     print_mino(mino);
+            // }
             return false;
         }
         Mino mino_cpy = mino << pos;
+        // print_mino(mino_cpy);
         if ((mino_cpy.mino[FIL_IDX] & silhouette).any()) { // 既存の石と被っている
+            // if (player_id != 0) {
+            //     std::cerr << "overlap with existing stones" << std::endl;
+            // }
             return false;
         }
-        if ((mino_cpy.mino[FIL_IDX] & corner).none()) { // 盤の角に自分のミノがない
+        if ((mino_cpy.mino[CNR_IDX] & corner).none()) { // 盤の隅(壁内)にCNRが来ていない
+            // if (player_id != 0) {
+            //     std::cerr << "corner not covered" << std::endl;
+            // }
             return false;
         }
         return true;
@@ -102,9 +116,12 @@ struct Board {
         
         for (size_t mino_index = 0; mino_index < player.minos.size(); ++mino_index) {
             Mino& mino = player.minos[mino_index];
-            if (!mino.usable) continue;
+            if (!mino.usable) {
+                continue;
+            }
             
-            for (int pos = 0; pos <= BOARD_SIZE + 2 - mino.size; ++pos) {
+            for (int pos = 0; pos <= BOARD_BIT_SIZE; ++pos) {
+            // for (int pos = 0; pos <= 10; ++pos) {
                 if (is_first_move) {
                     if (puttable_first(mino, pos, player_id)) {
                         legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
@@ -116,7 +133,7 @@ struct Board {
                 }
             }
         }
-        
+        std::cerr << legal_moves.size() << " legal moves generated for Player " << player_id << (is_first_move ? " (first move)" : "") << ".\n";
         return legal_moves;
     }
 
@@ -125,7 +142,7 @@ struct Board {
         Mino& mino = player.minos[move.mino_index];
         
         // ミノを盤面に配置
-        std::bitset<BOARD_BIT_SIZE> put_mino = mino.mino[FIL_IDX] << move.place;
+        std::bitset<BOARD_BIT_SIZE> put_mino = mino.mino[FIL_IDX] << move.pos;
         cells[player_id] |= put_mino;
         silhouette |= put_mino;
 
@@ -178,7 +195,7 @@ struct Board {
     }
 
     void print_move(int player_id, const Move& move) {
-        std::cout << "Player " << player_id << " places mino " << move.mino_index << " at (" << move.top << ", " << move.left << ")\n";
+        std::cout << "Player " << player_id << " places mino " << move.mino_index << " at " << move.pos << "\n";
         print_mino(players[player_id].minos[move.mino_index]);
     }
 
@@ -247,7 +264,7 @@ struct Board {
         int current_player = start_player_id;
         int consecutive_passes = 0;
         while (consecutive_passes < N_PLAYERS) {
-            // print_board();
+            print_board();
             
             // ランダムな手を取得
             Move move = get_random_move(current_player);
@@ -255,21 +272,21 @@ struct Board {
             if (move.mino_index == MINO_IDX_PASS) {
                 // パス
                 history[current_player].push_back(move);
-                // std::cerr << "Player " << current_player << " passes.\n";
+                std::cerr << "Player " << current_player << " passes.\n";
                 consecutive_passes++;
             } else {
                 // 手を実行
-                // std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at (" << move.top << ", " << move.left << ")\n";
+                std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at " << move.pos << "\n";
                 put_mino(current_player, move);
                 consecutive_passes = 0;
             }
 
-            // std::cerr << "\n";
+            std::cerr << "\n";
             
             // 次のプレイヤーへ
             current_player = (current_player + 1) % N_PLAYERS;
         }
 
-        // print_scores();
+        print_scores();
     }
 };

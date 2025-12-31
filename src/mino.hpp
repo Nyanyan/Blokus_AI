@@ -104,22 +104,21 @@ struct Mino {
     }
 
     bool shiftable_left(int shift) const {
-        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
-            if (((mino[cell_type] << shift) & BOARD_MASK).count() != mino[cell_type].count()) {
-                return false;
-            } 
+        if (((mino[FIL_IDX] << shift) & BOARD_MASK).count() != mino[FIL_IDX].count()) {
+            return false;
         }
         return true;
     }
 
-    bool shiftable_right(int shift) const {
-        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
-            if (((mino[cell_type] >> shift) & BOARD_MASK).count() != mino[cell_type].count()) {
-                return false;
-            } 
-        }
-        return true;
-    }
+    // bool shiftable_right(int shift) const {
+    //     // std::cerr << "debug " << shift << " " << ((mino[FIL_IDX] >> shift) & BOARD_MASK).count() << " " << mino[FIL_IDX].count() << std::endl;
+    //     if (((mino[FIL_IDX] >> shift) & BOARD_MASK).count() != mino[FIL_IDX].count()) {
+    //         // std::cerr << mino[FIL_IDX].to_string() << std::endl;
+    //         // std::cerr << (mino[FIL_IDX] >> shift).to_string() << std::endl;
+    //         return false;
+    //     }
+    //     return true;
+    // }
 };
 
 
@@ -685,6 +684,7 @@ void print_mino(const Mino& mino) {
         }
         std::cout << '\n';
     }
+    std::cout << '\n';
 }
 
 // 90度時計回りに回転

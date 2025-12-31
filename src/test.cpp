@@ -20,5 +20,11 @@ int main() {
 
     board.random_playout(0);
 
+    // Mino mino = all_minos[0];
+    // print_mino(mino);
+    // std::cerr << mino.shiftable_left(2) << std::endl;
+    // mino = mino << 2;
+    // print_mino(mino);
+
     return 0;
 }
