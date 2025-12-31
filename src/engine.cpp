@@ -1,20 +1,62 @@
 #include <iostream>
 #include <vector>
 
-constexpr int BOARD_SIZE = 20;
-
 constexpr int DNC = 0; // do not care
 constexpr int FIL = 1; // filled
 constexpr int CNR = 2; // corner
 constexpr int EDG = 3; // edge
 
-
 struct Mino {
     std::vector<std::vector<int>> mino;
     size_t h;
     size_t w;
+    int size;
     std::vector<int> families;
     bool usable = true;
+
+    void compute_size() {
+        size = 0;
+        for (const auto& row : mino) {
+            for (const auto& cell : row) {
+                if (cell == FIL) {
+                    ++size;
+                }
+            }
+        }
+    }
+};
+
+struct Player {
+    std::vector<Mino> minos;
+    int remaining_mino_size;
+    Player() {
+        minos = all_minos;
+        remaining_mino_size = 0;
+        for (const auto &mino: unique_minos) {
+            remaining_mino_size += mino.size;
+        }
+    }
+};
+
+constexpr int BOARD_SIZE = 20;
+constexpr int CELL_EMPTY = -1;
+
+struct Board {
+    int cells[BOARD_SIZE + 2][BOARD_SIZE + 2];
+    Player players[4];
+    Board() {
+        for (int i = 0; i < BOARD_SIZE + 2; ++i) {
+            for (int j = 0; j < BOARD_SIZE + 2; ++j) {
+                cells[i][j] = CELL_EMPTY;
+            }
+        }
+    }
+
+    bool puttable(Mino mino, int top, int left, int player_id) {
+        // ミノを (top, left) に置けるか判定する関数
+        // 実装は省略
+        return true; // 仮実装
+    }
 };
 
 const std::vector<std::vector<int>> M1 = {
@@ -168,13 +210,13 @@ const std::vector<std::vector<int>> M5Z = {
 };
 
 
-const std::vector<Mino> unique_minos = {
-    {M1, M1.size(), M1[0].size(), {}},
-    {M2, M2.size(), M2[0].size(), {}},
-    {M3V, M3V.size(), M3V[0].size(), {}}, {M3I, M3I.size(), M3I[0].size(), {}},
-    {M4I, M4I.size(), M4I[0].size(), {}}, {M4L, M4L.size(), M4L[0].size(), {}}, {M4N, M4N.size(), M4N[0].size(), {}}, {M4P, M4P.size(), M4P[0].size(), {}}, {M4T, M4T.size(), M4T[0].size(), {}},
-    {M5F, M5F.size(), M5F[0].size(), {}}, {M5I, M5I.size(), M5I[0].size(), {}}, {M5L, M5L.size(), M5L[0].size(), {}}, {M5N, M5N.size(), M5N[0].size(), {}}, {M5P, M5P.size(), M5P[0].size(), {}}, {M5T, M5T.size(), M5T[0].size(), {}},
-    {M5U, M5U.size(), M5U[0].size(), {}}, {M5V, M5V.size(), M5V[0].size(), {}}, {M5W, M5W.size(), M5W[0].size(), {}}, {M5X, M5X.size(), M5X[0].size(), {}}, {M5Y, M5Y.size(), M5Y[0].size(), {}}, {M5Z, M5Z.size(), M5Z[0].size(), {}}
+std::vector<Mino> unique_minos = {
+    {M1, M1.size(), M1[0].size()},
+    {M2, M2.size(), M2[0].size()},
+    {M3V, M3V.size(), M3V[0].size()}, {M3I, M3I.size(), M3I[0].size()},
+    {M4I, M4I.size(), M4I[0].size()}, {M4L, M4L.size(), M4L[0].size()}, {M4N, M4N.size(), M4N[0].size()}, {M4P, M4P.size(), M4P[0].size()}, {M4T, M4T.size(), M4T[0].size()},
+    {M5F, M5F.size(), M5F[0].size()}, {M5I, M5I.size(), M5I[0].size()}, {M5L, M5L.size(), M5L[0].size()}, {M5N, M5N.size(), M5N[0].size()}, {M5P, M5P.size(), M5P[0].size()}, {M5T, M5T.size(), M5T[0].size()},
+    {M5U, M5U.size(), M5U[0].size()}, {M5V, M5V.size(), M5V[0].size()}, {M5W, M5W.size(), M5W[0].size()}, {M5X, M5X.size(), M5X[0].size()}, {M5Y, M5Y.size(), M5Y[0].size()}, {M5Z, M5Z.size(), M5Z[0].size()}
 };
 
 std::vector<Mino> all_minos;
@@ -283,6 +325,20 @@ std::vector<Mino> get_all_transposed_minos(const Mino &mino) {
 }
 
 
+void init_unique_minos() {
+    for (auto& mino : unique_minos) {
+        mino.compute_size();
+    }
+}
+
+void init_all_minos() {
+    generate_all_minos();
+    for (auto& mino : all_minos) {
+        mino.compute_size();
+    }
+}
+
+
 
 void generate_all_minos() {
     for (const auto& mino : unique_minos) {
@@ -328,7 +384,8 @@ void print_all_unique_minos() {
 
 
 int main() {
-    generate_all_minos();
+    init_unique_minos();
+    init_all_minos();
 
     return 0;
 }
