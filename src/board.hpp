@@ -197,7 +197,7 @@ struct Board {
 
     void print_board() {
         for (int i = 0; i < BOARD_SIZE + 2; ++i) {
-            std::cerr << "-";
+            std::cerr << "_";
         }
         std::cout << "\n";
         for (int i = 1; i < BOARD_SIZE + 1; ++i) {
@@ -213,7 +213,7 @@ struct Board {
             std::cout << "\n";
         }
         for (int i = 0; i < BOARD_SIZE + 2; ++i) {
-            std::cerr << "-";
+            std::cerr << "`";
         }
         std::cout << "\n";
     }
