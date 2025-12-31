@@ -1,5 +1,7 @@
 #include "board.hpp"
 #include <chrono>
+#include <cmath>
+#include <memory>
 
 inline uint64_t tim() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
@@ -9,10 +11,49 @@ inline uint64_t tim() {
 
 struct Node {
     Board board;
-    int start_player_id;
-    double value;
-
-    Node(const Board& b, int pid) : board(b), start_player_id(pid) {}
+    int current_player_id;  // このノードで手番のプレイヤー
+    int target_player_id;   // 評価対象のプレイヤー（MCTS開始時のプレイヤー）
+    Move move;              // このノードに至る手
+    
+    Node* parent;
+    std::vector<std::unique_ptr<Node>> children;
+    
+    int visit_count;
+    double total_value;
+    bool is_fully_expanded;
+    std::vector<Move> untried_moves;
+    
+    Node(const Board& b, int current_pid, int target_pid, Node* p = nullptr, Move m = {-1, -1, MINO_IDX_PASS}) 
+        : board(b), current_player_id(current_pid), target_player_id(target_pid), move(m), 
+          parent(p), visit_count(0), total_value(0.0), is_fully_expanded(false) {
+        // 未試行の手を生成
+        Player& player = board.players[current_player_id];
+        untried_moves = board.generate_legal_moves(current_player_id, player.is_first_move);
+        if (untried_moves.empty()) {
+            untried_moves.push_back({-1, -1, MINO_IDX_PASS});
+        }
+    }
+    
+    double ucb1(double exploration_param = 1.41) const {
+        if (visit_count == 0) {
+            return std::numeric_limits<double>::infinity();
+        }
+        double exploitation = total_value / visit_count;
+        double exploration = exploration_param * std::sqrt(std::log(parent->visit_count) / visit_count);
+        return exploitation + exploration;
+    }
+    
+    bool is_terminal() {
+        // 全プレイヤーがパスしたかチェック
+        for (int i = 0; i < N_PLAYERS; ++i) {
+            const Player& player = board.players[i];
+            std::vector<Move> legal_moves = board.generate_legal_moves(i, player.is_first_move);
+            if (!legal_moves.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 
@@ -52,9 +93,91 @@ Move get_best_move_mc(Board& board, int player_id) {
     return *best_move;
 }
 
+Move get_best_move_mcts(Board& board, int player_id) {
+    const int simulation_count = 500; // シミュレーション回数
+    const double exploration_param = 1.41; // UCB1の探索パラメータ
+    
+    std::cerr << "Starting MCTS for Player " << player_id << " with " << simulation_count << " simulations...\n";
+    uint64_t start_time = tim();
+    
+    // ルートノードを作成
+    Node root(board, player_id, player_id);
+    
+    // MCTSのメインループ
+    for (int i = 0; i < simulation_count; ++i) {
+        // 1. Selection: UCB1で葉ノードまで選択
+        Node* node = &root;
+        while (!node->is_terminal() && node->untried_moves.empty() && !node->children.empty()) {
+            // 最もUCB1値が高い子を選択
+            Node* best_child = nullptr;
+            double best_ucb = -std::numeric_limits<double>::infinity();
+            for (auto& child : node->children) {
+                double ucb = child->ucb1(exploration_param);
+                if (ucb > best_ucb) {
+                    best_ucb = ucb;
+                    best_child = child.get();
+                }
+            }
+            node = best_child;
+        }
+        
+        // 2. Expansion: 未試行の手があれば子ノードを追加
+        if (!node->untried_moves.empty() && !node->is_terminal()) {
+            Move move = node->untried_moves.back();
+            node->untried_moves.pop_back();
+            
+            Board new_board = node->board;
+            if (move.mino_index != MINO_IDX_PASS) {
+                new_board.put_mino(node->current_player_id, move);
+            }
+            int next_player = (node->current_player_id + 1) % N_PLAYERS;
+            
+            node->children.push_back(std::make_unique<Node>(new_board, next_player, player_id, node, move));
+            node = node->children.back().get();
+        }
+        
+        // 3. Simulation: ランダムプレイアウト
+        Board sim_board = node->board;
+        sim_board.random_playout(node->current_player_id);
+        double score = sim_board.calculate_mcts_score(player_id);
+        
+        // 4. Backpropagation: 結果を親ノードへ伝播
+        while (node != nullptr) {
+            node->visit_count++;
+            node->total_value += score;
+            node = node->parent;
+        }
+    }
+    
+    // 最も訪問回数が多い子を選択
+    Node* best_child = nullptr;
+    int max_visits = -1;
+    for (auto& child : root.children) {
+        if (child->visit_count > max_visits) {
+            max_visits = child->visit_count;
+            best_child = child.get();
+        }
+    }
+    
+    uint64_t elapsed = tim() - start_time;
+    
+    if (best_child == nullptr) {
+        std::cerr << "No valid moves found. Passing. Elapsed " << elapsed << " ms\n";
+        return {-1, -1, MINO_IDX_PASS};
+    }
+    
+    double avg_value = best_child->total_value / best_child->visit_count;
+    std::cerr << "Best move: pos " << best_child->move.pos << " mino " << best_child->move.mino_index 
+              << " (visits: " << best_child->visit_count << ", avg_value: " << avg_value << ") "
+              << "Elapsed " << elapsed << " ms (" << (elapsed * 1000 / simulation_count) << " us/simulation)\n";
+    
+    return best_child->move;
+}
+
 Move get_best_move(Board& board, int player_id) {
     uint64_t strt_all = tim();
-    Move res = get_best_move_mc(board, player_id);
-    std::cerr << "Best move chosen at pos " << res.pos << " with mino " << res.mino_index << " having MC score: " << res.mcts_score << " elapsed " << (tim() - strt_all) << " ms\n";
+    // Move res = get_best_move_mc(board, player_id);  // Monte Carloを使用
+    Move res = get_best_move_mcts(board, player_id);  // MCTSを使用
+    std::cerr << "Best move chosen at pos " << res.pos << " with mino " << res.mino_index << " elapsed " << (tim() - strt_all) << " ms\n";
     return res;
 }

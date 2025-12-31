@@ -9,9 +9,6 @@ int main() {
 
     Board board;
 
-    std::vector<Node> nodes;
-    nodes.emplace_back(board, start_player_id);
-
     int current_player = start_player_id;
     int consecutive_passes = 0;
     while (consecutive_passes < N_PLAYERS) {
