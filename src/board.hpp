@@ -1,4 +1,5 @@
 #include <random>
+#include <algorithm>
 #include "mino.hpp"
 
 struct Player {
@@ -22,11 +23,14 @@ struct Move {
     int top;
     int left;
     int mino_index;
+    double mcts_score;
+    int n_tried;
 };
 
 constexpr int BOARD_SIZE = 20;
 constexpr int CELL_EMPTY = -1;
 constexpr int N_PLAYERS = 4;
+constexpr double WIN_SCORE_BONUS = 10000.0;
 
 struct Board {
     int cells[BOARD_SIZE + 2][BOARD_SIZE + 2];
@@ -192,16 +196,26 @@ struct Board {
     }
 
     void print_board() {
+        for (int i = 0; i < BOARD_SIZE + 2; ++i) {
+            std::cerr << "-";
+        }
+        std::cout << "\n";
         for (int i = 1; i < BOARD_SIZE + 1; ++i) {
+            std::cerr << "|";
             for (int j = 1; j < BOARD_SIZE + 1; ++j) {
                 if (cells[i][j] == CELL_EMPTY) {
-                    std::cout << ".";
+                    std::cout << " ";
                 } else {
                     std::cout << static_cast<int>(cells[i][j]);
                 }
             }
+            std::cerr << "|";
             std::cout << "\n";
         }
+        for (int i = 0; i < BOARD_SIZE + 2; ++i) {
+            std::cerr << "-";
+        }
+        std::cout << "\n";
     }
 
     void print_move(int player_id, const Move& move) {
@@ -212,6 +226,31 @@ struct Board {
     int calculate_score(int player_id) {
         Player& player = players[player_id];
         return -player.remaining_mino_size;
+    }
+
+    double calculate_mcts_score(int player_id) {
+        std::vector<int> scores_sorted;
+        int player_score;
+        for (int i = 0; i < N_PLAYERS; ++i) {
+            int score = calculate_score(i);
+            scores_sorted.push_back(score);
+            if (i == player_id) {
+                player_score = score;
+            }
+        }
+        std::sort(scores_sorted.begin(), scores_sorted.end(), std::greater<int>());
+        double score;
+        if (player_score == scores_sorted[0] && player_score > scores_sorted[1]) { // 単独1位
+            int second_diff = scores_sorted[0] - scores_sorted[1];
+            score = static_cast<double>(player_score) + WIN_SCORE_BONUS - second_diff; // スコア+ボーナス-2位との差分
+        } else if (player_score == scores_sorted[0] && player_score == scores_sorted[1]) { // 1位タイ
+            int tie_count = std::count(scores_sorted.begin(), scores_sorted.end(), player_score);
+            score = static_cast<double>(player_score) + WIN_SCORE_BONUS / tie_count; // スコア+ボーナス/タイ人数
+        } else { // 2位以降
+            int diff = scores_sorted[0] - player_score; // 1位との差分
+            score = static_cast<double>(player_score) - diff; // スコア-1位との差分
+        }
+        return score;
     }
 
     void print_scores() {
@@ -242,7 +281,7 @@ struct Board {
         int current_player = start_player_id;
         int consecutive_passes = 0;
         while (consecutive_passes < N_PLAYERS) {
-            print_board();
+            // print_board();
             
             // ランダムな手を取得
             Move move = get_random_move(current_player);
@@ -250,21 +289,21 @@ struct Board {
             if (move.mino_index == MINO_IDX_PASS) {
                 // パス
                 history[current_player].push_back(move);
-                std::cerr << "Player " << current_player << " passes.\n";
+                // std::cerr << "Player " << current_player << " passes.\n";
                 consecutive_passes++;
             } else {
                 // 手を実行
-                std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at (" << move.top << ", " << move.left << ")\n";
+                // std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at (" << move.top << ", " << move.left << ")\n";
                 put_mino(current_player, move);
                 consecutive_passes = 0;
             }
 
-            std::cerr << "\n";
+            // std::cerr << "\n";
             
             // 次のプレイヤーへ
             current_player = (current_player + 1) % N_PLAYERS;
         }
 
-        print_scores();
+        // print_scores();
     }
 };

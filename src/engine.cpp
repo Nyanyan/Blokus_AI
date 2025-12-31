@@ -11,16 +11,52 @@ struct Node {
     Node(const Board& b, int pid) : board(b), start_player_id(pid) {}
 };
 
+Move get_best_move(Board& board, int player_id) {
+    Player& player = board.players[player_id];
+    std::vector<Move> legal_moves = board.generate_legal_moves(player_id, player.is_first_move);
+    
+    if (legal_moves.empty()) {
+        return {-1, -1, MINO_IDX_PASS}; // パス
+    }
+
+    std::cerr << "Evaluating " << legal_moves.size() << " legal moves for Player " << player_id << " using MC...\n";
+
+    const int n_try_per_move = 5;
+    for (auto& move : legal_moves) {
+        move.mcts_score = 0.0;
+        move.n_tried = 0;
+        for (int i = 0; i < n_try_per_move; ++i) {
+            Board sim_board = board;
+            sim_board.put_mino(player_id, move);
+            sim_board.random_playout((player_id + 1) % N_PLAYERS);
+            double score = sim_board.calculate_mcts_score(player_id);
+            move.mcts_score += static_cast<double>(score);
+            move.n_tried++;
+        }
+        move.mcts_score /= static_cast<double>(move.n_tried);
+        std::cerr << "Move at (" << move.top << ", " << move.left << ") with mino " << move.mino_index << " has MC score: " << move.mcts_score << " after " << move.n_tried << " trials.\n";
+    }
+    // 最もスコアの高い手を選択
+    Move* best_move = &legal_moves[0];
+    for (auto& move : legal_moves) {
+        if (move.mcts_score > best_move->mcts_score) {
+            best_move = &move;
+        }
+    }
+    return *best_move;
+}
+
 
 
 int main() {
     init_unique_minos();
     init_all_minos();
 
-    int ai_player_id = -1;
+    int ai_player_id = 1;
     int start_player_id = 0;
 
     Board board;
+
     std::vector<Node> nodes;
     nodes.emplace_back(board, start_player_id);
 
@@ -31,6 +67,7 @@ int main() {
         
         if (current_player == ai_player_id) {
             std::cout << "AI's turn (Player " << current_player << ")\n";
+            Move move = get_best_move(board, current_player);
         } else {
             // ランダムな手を取得
             Move move = board.get_random_move(current_player);
