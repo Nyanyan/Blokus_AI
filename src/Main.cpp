@@ -184,32 +184,37 @@ void Main() {
         // マウスホバー時のミノプレビュー（人間プレイヤーの手番のみ）
         if (!game_over && !is_ai[current_player] && selected_mino_index >= 0 && !ai_thinking) {
             Vec2 mousePos = Cursor::Pos();
-            int gridCol = static_cast<int>((mousePos.x - gridX) / cellSize);
-            int gridRow = static_cast<int>((mousePos.y - gridY) / cellSize);
+            const Mino& mino = board.players[current_player].minos[selected_mino_index];
             
-            if (gridCol >= 0 && gridCol < BOARD_SIZE && gridRow >= 0 && gridRow < BOARD_SIZE) {
-                const Mino& mino = board.players[current_player].minos[selected_mino_index];
-                
-                // ミノの中心を取得してオフセットを計算
-                Point minoCenter = GetMinoCenter(mino);
-                int centerOffsetCol = minoCenter.x - 1;  // 壁分を引く
-                int centerOffsetRow = minoCenter.y - 1;
-                
-                // マウス位置がミノの中心になるように調整
-                int targetCol = gridCol - centerOffsetCol;
-                int targetRow = gridRow - centerOffsetRow;
-                int bit_pos = (targetRow + 1) * BOARD_WITH_WALL_SIZE + (targetCol + 1);
-                
-                bool can_place = false;
-                if (board.players[current_player].is_first_move) {
-                    can_place = board.puttable_first(mino, bit_pos, current_player);
-                } else {
-                    can_place = board.puttable(mino, bit_pos, current_player);
-                }
-                
-                Color previewColor = can_place ? PlayerColors[current_player] : Color(150, 150, 150);
-                DrawMinoOnGrid(mino, bit_pos, previewColor, gridX, gridY, cellSize, 0.5);
+            // マウス位置からグリッド座標を計算
+            double mouseCellX = (mousePos.x - gridX) / cellSize;
+            double mouseCellY = (mousePos.y - gridY) / cellSize;
+            
+            // ミノの中心を取得
+            Point minoCenter = GetMinoCenter(mino);
+            
+            // マウス位置がミノの中心になるように、ミノの配置位置（bit_pos）を計算
+            // minoCenterは壁を含む座標なので、1を引いてグリッド座標に変換
+            int centerGridCol = minoCenter.x - 1;
+            int centerGridRow = minoCenter.y - 1;
+            
+            // ミノの中心がマウス位置に来るためのオフセット
+            // bit_pos = 0 のとき、minoCenterがグリッドの (centerGridCol, centerGridRow) に来る
+            // マウスが (mouseCellX, mouseCellY) にあるとき、minoCenterがそこに来るためには
+            // オフセット = (mouseCellX - centerGridCol, mouseCellY - centerGridRow)
+            int targetGridCol = static_cast<int>(Math::Round(mouseCellX)) - centerGridCol;
+            int targetGridRow = static_cast<int>(Math::Round(mouseCellY)) - centerGridRow;
+            int bit_pos = (targetGridRow + 1) * BOARD_WITH_WALL_SIZE + (targetGridCol + 1);
+            
+            bool can_place = false;
+            if (board.players[current_player].is_first_move) {
+                can_place = board.puttable_first(mino, bit_pos, current_player);
+            } else {
+                can_place = board.puttable(mino, bit_pos, current_player);
             }
+            
+            Color previewColor = can_place ? PlayerColors[current_player] : Color(150, 150, 150);
+            DrawMinoOnGrid(mino, bit_pos, previewColor, gridX, gridY, cellSize, 0.5);
         }
 
         // 右側に各プレイヤーの情報を表示
@@ -314,7 +319,7 @@ void Main() {
                     }
                     minoBox.drawFrame(2, 0, is_selected ? PlayerColors[current_player] : Color(200, 200, 200));
                     
-                    DrawMinoSmall(board.players[current_player].minos[mino_idx], Vec2(x + 5, y + 5), 8, PlayerColors[current_player]);
+                    DrawMinoSmall(board.players[current_player].minos[mino_idx], Vec2(x + 5, y + 5), 10, PlayerColors[current_player]);
                     
                     if (!is_ai[current_player] && minoBox.leftClicked()) {
                         selected_mino_index = mino_idx;
@@ -326,51 +331,54 @@ void Main() {
                 }
             }
             
-            // 右クリックで回転
+            // 右クリックでfamily内の次のミノに切り替え
             if (!is_ai[current_player] && selected_mino_index >= 0 && MouseR.down()) {
-                // 次の回転を探す
-                int start_idx = selected_mino_index;
                 const auto& families = board.players[current_player].minos[selected_mino_index].families;
-                int next_idx = -1;
+                // 現在のミノのfamilies内での位置を探す
                 for (size_t i = 0; i < families.size(); ++i) {
                     if (families[i] == selected_mino_index) {
-                        next_idx = families[(i + 1) % families.size()];
+                        // 次のミノに切り替え（循環）
+                        selected_mino_index = families[(i + 1) % families.size()];
                         break;
                     }
-                }
-                if (next_idx >= 0) {
-                    selected_mino_index = next_idx;
                 }
             }
             
             // マウス左クリックで配置
             if (!is_ai[current_player] && selected_mino_index >= 0 && MouseL.down()) {
                 Vec2 mousePos = Cursor::Pos();
-                int gridCol = static_cast<int>((mousePos.x - gridX) / cellSize);
-                int gridRow = static_cast<int>((mousePos.y - gridY) / cellSize);
+                const Mino& mino = board.players[current_player].minos[selected_mino_index];
                 
-                if (gridCol >= 0 && gridCol < BOARD_SIZE && gridRow >= 0 && gridRow < BOARD_SIZE) {
-                    int bit_pos = (gridRow + 1) * BOARD_WITH_WALL_SIZE + (gridCol + 1);
-                    
-                    const Mino& mino = board.players[current_player].minos[selected_mino_index];
-                    bool can_place = false;
-                    if (board.players[current_player].is_first_move) {
-                        can_place = board.puttable_first(mino, bit_pos, current_player);
-                    } else {
-                        can_place = board.puttable(mino, bit_pos, current_player);
-                    }
-                    
-                    if (can_place) {
-                        Move move = {bit_pos, selected_mino_index, 0.0, 0};
-                        board.put_mino(current_player, move);
-                        consecutive_passes = 0;
-                        current_player = (current_player + 1) % N_PLAYERS;
-                        selected_mino_index = -1;
-                        selected_unique_mino_idx = -1;
-                    }
+                // マウス位置からグリッド座標を計算
+                double mouseCellX = (mousePos.x - gridX) / cellSize;
+                double mouseCellY = (mousePos.y - gridY) / cellSize;
+                
+                // ミノの中心を取得
+                Point minoCenter = GetMinoCenter(mino);
+                int centerGridCol = minoCenter.x - 1;
+                int centerGridRow = minoCenter.y - 1;
+                
+                // マウス位置がミノの中心になるように配置位置を計算
+                int targetGridCol = static_cast<int>(Math::Round(mouseCellX)) - centerGridCol;
+                int targetGridRow = static_cast<int>(Math::Round(mouseCellY)) - centerGridRow;
+                int bit_pos = (targetGridRow + 1) * BOARD_WITH_WALL_SIZE + (targetGridCol + 1);
+                
+                bool can_place = false;
+                if (board.players[current_player].is_first_move) {
+                    can_place = board.puttable_first(mino, bit_pos, current_player);
+                } else {
+                    can_place = board.puttable(mino, bit_pos, current_player);
+                }
+                
+                if (can_place) {
+                    Move move = {bit_pos, selected_mino_index, 0.0, 0};
+                    board.put_mino(current_player, move);
+                    consecutive_passes = 0;
+                    current_player = (current_player + 1) % N_PLAYERS;
+                    selected_mino_index = -1;
+                    selected_unique_mino_idx = -1;
                 }
             }
-            
         }
 
         // ゲーム終了時の表示
