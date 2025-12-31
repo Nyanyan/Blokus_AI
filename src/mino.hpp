@@ -578,6 +578,7 @@ std::vector<Mino> unique_minos = {
 };
 
 std::vector<Mino> all_minos;
+std::vector<std::vector<int>> all_minos_corner_bits;
 
 
 // 指定した行のビット列を取得
@@ -798,6 +799,15 @@ void generate_all_minos() {
         for (auto& m : transposed) {
             m.families = family_indices;
             all_minos.push_back(m);
+            
+            // 各ミノのCNR_IDXの立っているビットの位置をall_minos_corner_bitsに保存
+            std::vector<int> corner_bits;
+            for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+                if (m.mino[CNR_IDX][bit_pos]) {
+                    corner_bits.push_back(bit_pos);
+                }
+            }
+            all_minos_corner_bits.push_back(corner_bits);
         }
     }
 }

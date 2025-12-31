@@ -1,5 +1,6 @@
 #include <random>
 #include <algorithm>
+#include <unordered_set>
 #include "mino.hpp"
 
 struct Player {
@@ -113,6 +114,18 @@ struct Board {
     std::vector<Move> generate_legal_moves(int player_id, bool is_first_move) {
         std::vector<Move> legal_moves;
         Player& player = players[player_id];
+
+        std::vector<int> player_bits;
+        for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+            if (cells[player_id][bit_pos]) {
+                player_bits.push_back(bit_pos);
+            }
+        }
+        // std::cerr << "player bits" << std::endl;
+        // for (int bit : player_bits) {
+        //     std::cerr << bit << " ";
+        // }
+        // std::cerr << "\n";
         
         for (size_t mino_index = 0; mino_index < player.minos.size(); ++mino_index) {
             Mino& mino = player.minos[mino_index];
@@ -120,7 +133,34 @@ struct Board {
                 continue;
             }
             
-            for (int pos = 0; pos <= BOARD_BIT_SIZE; ++pos) {
+            std::unordered_set<int> possible_positions;
+            if (is_first_move) {
+                for (int pos = 0; pos < BOARD_BIT_SIZE; ++pos) {
+                    possible_positions.insert(pos);
+                }
+            } else {
+                std::vector<int> &corner_bits = all_minos_corner_bits[mino_index];
+                
+                // for (int bit : corner_bits) {
+                //     std::cerr << bit << " ";
+                // }
+                // std::cerr << "\n";
+                
+                // すべてのiとjに対してplayer_bits[i] - corner_bits[j]が0以上であるときpossible_positionsに追加
+                for (size_t i = 0; i < player_bits.size(); ++i) {
+                    for (size_t j = 0; j < corner_bits.size(); ++j) {
+                        int pos = player_bits[i] - corner_bits[j];
+                        // int pos = corner_bits[j] - player_bits[i];
+                        if (pos >= 0) {
+                            possible_positions.insert(pos);
+                        }
+                    }
+                }
+                // std::cerr << possible_positions.size() << std::endl;
+            }
+
+            // for (int pos = 0; pos <= BOARD_BIT_SIZE; ++pos) {
+            for (int pos: possible_positions) {
                 if (is_first_move) {
                     if (puttable_first(mino, pos, player_id)) {
                         legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
