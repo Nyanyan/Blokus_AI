@@ -240,16 +240,23 @@ struct Board {
         }
         std::sort(scores_sorted.begin(), scores_sorted.end(), std::greater<int>());
         double score;
-        if (player_score == scores_sorted[0] && player_score > scores_sorted[1]) { // 単独1位
+        if (player_score == scores_sorted[0]) {
             int second_diff = scores_sorted[0] - scores_sorted[1];
             score = static_cast<double>(player_score) + WIN_SCORE_BONUS - second_diff; // スコア+ボーナス-2位との差分
-        } else if (player_score == scores_sorted[0] && player_score == scores_sorted[1]) { // 1位タイ
-            int tie_count = std::count(scores_sorted.begin(), scores_sorted.end(), player_score);
-            score = static_cast<double>(player_score) + WIN_SCORE_BONUS / tie_count; // スコア+ボーナス/タイ人数
-        } else { // 2位以降
+        } else {
             int diff = scores_sorted[0] - player_score; // 1位との差分
             score = static_cast<double>(player_score) - diff; // スコア-1位との差分
         }
+        // if (player_score == scores_sorted[0] && player_score > scores_sorted[1]) { // 単独1位
+        //     int second_diff = scores_sorted[0] - scores_sorted[1];
+        //     score = static_cast<double>(player_score) + WIN_SCORE_BONUS - second_diff; // スコア+ボーナス-2位との差分
+        // } else if (player_score == scores_sorted[0] && player_score == scores_sorted[1]) { // 1位タイ
+        //     int tie_count = std::count(scores_sorted.begin(), scores_sorted.end(), player_score);
+        //     score = static_cast<double>(player_score) + WIN_SCORE_BONUS / tie_count; // スコア+ボーナス/タイ人数
+        // } else { // 2位以降
+        //     int diff = scores_sorted[0] - player_score; // 1位との差分
+        //     score = static_cast<double>(player_score) - diff; // スコア-1位との差分
+        // }
         return score;
     }
 
