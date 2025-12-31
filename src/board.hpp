@@ -48,21 +48,18 @@ struct Board {
         }
     }
 
-    bool puttable_first(Mino mino, int pos, int player_id) {
+    inline bool puttable_first(const Mino& mino, int pos, int player_id) {
         // 最初のミノを pos に置けるか判定する関数
         // minoのCNRが盤面の隅に来ること、minoのFILがすべて空であることが条件。
 
         // 各プレイヤーの開始位置（四隅）
-        int corner_positions[4][2] = {
+        static const int corner_positions[4][2] = {
             {0, 0},                    // プレイヤー0: 左上
             {0, BOARD_SIZE + 1},       // プレイヤー1: 右上
             {BOARD_SIZE + 1, BOARD_SIZE + 1},  // プレイヤー2: 右下
             {BOARD_SIZE + 1, 0}        // プレイヤー3: 左下
         };
 
-        std::bitset<BOARD_BIT_SIZE> corner;
-        int corner_idx = corner_positions[player_id][0] * BOARD_WITH_WALL_SIZE + corner_positions[player_id][1];
-        corner.set(corner_idx);
         // if (player_id != 0) {
         //     std::cerr << corner.to_string() << std::endl;
         // }
@@ -74,40 +71,54 @@ struct Board {
             // }
             return false;
         }
-        Mino mino_cpy = mino << pos;
-        // print_mino(mino_cpy);
-        if ((mino_cpy.mino[CNR_IDX] & corner).none()) { // 盤の隅(壁内)にCNRが来ていない
-            // if (player_id != 0) {
-            //     std::cerr << "corner not covered" << std::endl;
-            // }
-            return false;
-        }
-        if ((mino_cpy.mino[FIL_IDX] & silhouette).any()) { // 既存の石と被っている
+        
+        // コピーを避けてシフト後のビットを直接計算
+        std::bitset<BOARD_BIT_SIZE> shifted_fil = mino.mino[FIL_IDX] << pos;
+        if ((shifted_fil & silhouette).any()) { // 既存の石と被っている
             // if (player_id != 0) {
             //     std::cerr << "overlap with existing stones" << std::endl;
             // }
             return false;
         }
+        
+        // 盤の隅(壁内)にCNRが来ているかチェック
+        int corner_idx = corner_positions[player_id][0] * BOARD_WITH_WALL_SIZE + corner_positions[player_id][1];
+        std::bitset<BOARD_BIT_SIZE> shifted_cnr = mino.mino[CNR_IDX] << pos;
+        if (!shifted_cnr[corner_idx]) { // 盤の隅(壁内)にCNRが来ていない
+            // if (player_id != 0) {
+            //     std::cerr << "corner not covered" << std::endl;
+            // }
+            return false;
+        }
+        
         return true;
     }
 
-    bool puttable(Mino mino, int pos, int player_id) {
+    inline bool puttable(const Mino& mino, int pos, int player_id) {
         // ミノを pos に置けるか判定する関数
         // minoのCNRに1つ以上自分の色があること、minoのすべてのEDGに自分の色がないこと、minoのFILがすべてCELL_EMPTYであることが条件。
         
         if (!mino.shiftable_left(pos)) { // シフトできない
             return false;
         }
-        Mino mino_cpy = mino << pos;
-        if ((mino_cpy.mino[FIL_IDX] & silhouette).any()) { // 既存の石と被っている
+        
+        // コピーを避けてシフト後のビットを直接計算
+        std::bitset<BOARD_BIT_SIZE> shifted_fil = mino.mino[FIL_IDX] << pos;
+        if ((shifted_fil & silhouette).any()) { // 既存の石と被っている
             return false;
         }
-        if ((mino_cpy.mino[CNR_IDX] & cells[player_id]).none()) { // 角が自分の石と接していない
+        
+        const std::bitset<BOARD_BIT_SIZE>& player_cells = cells[player_id];
+        std::bitset<BOARD_BIT_SIZE> shifted_edg = mino.mino[EDG_IDX] << pos;
+        if ((shifted_edg & player_cells).any()) { // 辺が自分の石と接している
             return false;
         }
-        if ((mino_cpy.mino[EDG_IDX] & cells[player_id]).any()) { // 辺が自分の石と接している
+        
+        std::bitset<BOARD_BIT_SIZE> shifted_cnr = mino.mino[CNR_IDX] << pos;
+        if ((shifted_cnr & player_cells).none()) { // 角が自分の石と接していない
             return false;
         }
+        
         return true;
     }
 
@@ -119,8 +130,10 @@ struct Board {
         std::vector<int> player_bits;
         if (!is_first_move) {
             player_bits.reserve(100); // 事前にメモリ確保
+            const std::bitset<BOARD_BIT_SIZE>& player_cells = cells[player_id];
+            // ビット演算で高速化
             for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
-                if (cells[player_id][bit_pos]) {
+                if (player_cells[bit_pos]) {
                     player_bits.push_back(bit_pos);
                 }
             }
@@ -131,21 +144,26 @@ struct Board {
         // }
         // std::cerr << "\n";
         
-        for (size_t mino_index = 0; mino_index < player.minos.size(); ++mino_index) {
-            Mino& mino = player.minos[mino_index];
+        const std::vector<Mino>& minos = player.minos;
+        const size_t minos_size = minos.size();
+        
+        for (size_t mino_index = 0; mino_index < minos_size; ++mino_index) {
+            const Mino& mino = minos[mino_index];
             if (!mino.usable) {
                 continue;
             }
             
             if (is_first_move) {
-                // 初手の場合は全位置をチェックするが、unordered_setを使わず直接チェック
+                // 初手の場合は全位置をチェック（shiftable_leftチェックはputtable_first内で実施）
                 for (int pos = 0; pos < BOARD_BIT_SIZE; ++pos) {
                     if (puttable_first(mino, pos, player_id)) {
                         legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
                     }
                 }
             } else {
-                std::vector<int> &corner_bits = all_minos_corner_bits[mino_index];
+                const std::vector<int>& corner_bits = all_minos_corner_bits[mino_index];
+                const size_t player_bits_size = player_bits.size();
+                const size_t corner_bits_size = corner_bits.size();
                 
                 // for (int bit : corner_bits) {
                 //     std::cerr << bit << " ";
@@ -154,12 +172,13 @@ struct Board {
                 
                 // 重複を避けるためのvectorとソート（unordered_setより高速）
                 std::vector<int> possible_positions;
-                possible_positions.reserve(player_bits.size() * corner_bits.size());
+                possible_positions.reserve(player_bits_size * corner_bits_size);
                 
                 // すべてのiとjに対してplayer_bits[i] - corner_bits[j]が0以上であるときpossible_positionsに追加
-                for (size_t i = 0; i < player_bits.size(); ++i) {
-                    for (size_t j = 0; j < corner_bits.size(); ++j) {
-                        int pos = player_bits[i] - corner_bits[j];
+                for (size_t i = 0; i < player_bits_size; ++i) {
+                    const int player_bit = player_bits[i];
+                    for (size_t j = 0; j < corner_bits_size; ++j) {
+                        int pos = player_bit - corner_bits[j];
                         if (pos >= 0) {
                             possible_positions.push_back(pos);
                         }
