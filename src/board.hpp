@@ -75,15 +75,15 @@ struct Board {
         }
         Mino mino_cpy = mino << pos;
         // print_mino(mino_cpy);
-        if ((mino_cpy.mino[FIL_IDX] & silhouette).any()) { // 既存の石と被っている
-            // if (player_id != 0) {
-            //     std::cerr << "overlap with existing stones" << std::endl;
-            // }
-            return false;
-        }
         if ((mino_cpy.mino[CNR_IDX] & corner).none()) { // 盤の隅(壁内)にCNRが来ていない
             // if (player_id != 0) {
             //     std::cerr << "corner not covered" << std::endl;
+            // }
+            return false;
+        }
+        if ((mino_cpy.mino[FIL_IDX] & silhouette).any()) { // 既存の石と被っている
+            // if (player_id != 0) {
+            //     std::cerr << "overlap with existing stones" << std::endl;
             // }
             return false;
         }
@@ -121,7 +121,6 @@ struct Board {
             }
             
             for (int pos = 0; pos <= BOARD_BIT_SIZE; ++pos) {
-            // for (int pos = 0; pos <= 10; ++pos) {
                 if (is_first_move) {
                     if (puttable_first(mino, pos, player_id)) {
                         legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
