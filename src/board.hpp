@@ -242,7 +242,7 @@ struct Board {
         double score;
         if (player_score == scores_sorted[0]) {
             int second_diff = scores_sorted[0] - scores_sorted[1];
-            score = static_cast<double>(player_score) + WIN_SCORE_BONUS - second_diff; // スコア+ボーナス-2位との差分
+            score = static_cast<double>(player_score) + second_diff; // スコア+2位との差分
         } else {
             int diff = scores_sorted[0] - player_score; // 1位との差分
             score = static_cast<double>(player_score) - diff; // スコア-1位との差分
