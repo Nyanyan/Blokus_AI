@@ -470,12 +470,12 @@ const std::bitset<BOARD_BIT_SIZE> M5Z[N_MINO_CELL_TYPE] = {
 
 
 std::vector<Mino> unique_minos = {
-    {M1, M1.size(), M1[0].size()},
-    {M2, M2.size(), M2[0].size()},
-    {M3V, M3V.size(), M3V[0].size()}, {M3I, M3I.size(), M3I[0].size()},
-    {M4I, M4I.size(), M4I[0].size()}, {M4L, M4L.size(), M4L[0].size()}, {M4N, M4N.size(), M4N[0].size()}, {M4P, M4P.size(), M4P[0].size()}, {M4T, M4T.size(), M4T[0].size()},
-    {M5F, M5F.size(), M5F[0].size()}, {M5I, M5I.size(), M5I[0].size()}, {M5L, M5L.size(), M5L[0].size()}, {M5N, M5N.size(), M5N[0].size()}, {M5P, M5P.size(), M5P[0].size()}, {M5T, M5T.size(), M5T[0].size()},
-    {M5U, M5U.size(), M5U[0].size()}, {M5V, M5V.size(), M5V[0].size()}, {M5W, M5W.size(), M5W[0].size()}, {M5X, M5X.size(), M5X[0].size()}, {M5Y, M5Y.size(), M5Y[0].size()}, {M5Z, M5Z.size(), M5Z[0].size()}
+    {M1},
+    {M2},
+    {M3V}, {M3I},
+    {M4I}, {M4L}, {M4N}, {M4P}, {M4T},
+    {M5F}, {M5I}, {M5L}, {M5N}, {M5P}, {M5T},
+    {M5U}, {M5V}, {M5W}, {M5X}, {M5Y}, {M5Z}
 };
 
 std::vector<Mino> all_minos;
@@ -483,18 +483,18 @@ std::vector<Mino> all_minos;
 
 
 void print_mino(const Mino& mino) {
-    for (const auto& row : mino.mino) {
-        for (const auto& cell : row) {
-            if (cell == DNC) {
-                std::cout << " ";
-            } else if (cell == FIL) {
+    for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
+        for (int j = 0; j < BOARD_WITH_WALL_SIZE; ++j) {
+            int bit_pos = i * BOARD_WITH_WALL_SIZE + j;
+            
+            if (mino.mino[FIL_IDX][bit_pos]) {
                 std::cout << "#";
-            } else if (cell == CNR) {
+            } else if (mino.mino[CNR_IDX][bit_pos]) {
                 std::cout << ".";
-            } else if (cell == EDG) {
+            } else if (mino.mino[EDG_IDX][bit_pos]) {
                 std::cout << "-";
             } else {
-                std::cout << "?";
+                std::cout << " ";
             }
         }
         std::cout << '\n';
