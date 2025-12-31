@@ -58,10 +58,10 @@ void init_minos_bounds() {
 }
 
 // ミノの中心位置（FIL_IDXの範囲の中心）を取得する関数
-Point GetMinoCenter(int mino_index) {
+Vec2 GetMinoCenterFloat(int mino_index) {
     const MinoBounds& bounds = all_minos_bounds[mino_index];
-    // 範囲の中心を返す
-    return Point(bounds.minCol + bounds.width / 2, bounds.minRow + bounds.height / 2);
+    // 範囲の中心を返す（小数点以下も含む）
+    return Vec2(bounds.minCol + bounds.width / 2.0, bounds.minRow + bounds.height / 2.0);
 }
 
 // ミノを小さく描画する関数（残りミノ表示用）
@@ -205,20 +205,17 @@ void Main() {
             double mouseCellX = (mousePos.x - gridX) / cellSize;
             double mouseCellY = (mousePos.y - gridY) / cellSize;
             
-            // ミノの中心を取得
-            Point minoCenter = GetMinoCenter(selected_mino_index);
+            // ミノの中心を取得（小数点以下も含む）
+            Vec2 minoCenter = GetMinoCenterFloat(selected_mino_index);
             
             // マウス位置がミノの中心になるように、ミノの配置位置（bit_pos）を計算
             // minoCenterは壁を含む座標なので、1を引いてグリッド座標に変換
-            int centerGridCol = minoCenter.x - 1;
-            int centerGridRow = minoCenter.y - 1;
+            double centerGridCol = minoCenter.x - 1.0;
+            double centerGridRow = minoCenter.y - 1.0;
             
-            // ミノの中心がマウス位置に来るためのオフセット
-            // bit_pos = 0 のとき、minoCenterがグリッドの (centerGridCol, centerGridRow) に来る
-            // マウスが (mouseCellX, mouseCellY) にあるとき、minoCenterがそこに来るためには
-            // オフセット = (mouseCellX - centerGridCol, mouseCellY - centerGridRow)
-            int targetGridCol = static_cast<int>(Math::Round(mouseCellX)) - centerGridCol;
-            int targetGridRow = static_cast<int>(Math::Round(mouseCellY)) - centerGridRow;
+            // マウス位置がミノの中心に来るためのオフセット
+            int targetGridCol = static_cast<int>(Math::Round(mouseCellX - centerGridCol));
+            int targetGridRow = static_cast<int>(Math::Round(mouseCellY - centerGridRow));
             int bit_pos = (targetGridRow + 1) * BOARD_WITH_WALL_SIZE + (targetGridCol + 1);
             
             bool can_place = false;
@@ -273,11 +270,11 @@ void Main() {
             // ミノを描画（11個で改行、クリック可能）
             for (size_t idx = 0; idx < unique_usable_minos.size(); ++idx) {
                 int mino_idx = unique_usable_minos[idx];
-                double x = minoX + (idx % 11) * 28;
-                double y = minoY + (idx / 11) * 28;
+                double x = minoX + (idx % 11) * 40;
+                double y = minoY + (idx / 11) * 40;
                 
                 // クリック可能な領域
-                RectF minoArea(x - 2, y - 2, 26, 26);
+                RectF minoArea(x - 2, y - 2, 38, 38);
                 bool is_hovered = minoArea.mouseOver();
                 bool is_current_player = (player_id == current_player && !is_ai[current_player] && !ai_thinking && !game_over);
                 
@@ -286,7 +283,7 @@ void Main() {
                     minoArea.draw(ColorF(0.9, 0.9, 0.9, 0.5));
                 }
                 
-                DrawMinoSmall(mino_idx, Vec2(x, y), 4.5, PlayerColors[player_id]);
+                DrawMinoSmall(mino_idx, Vec2(x, y), 7, PlayerColors[player_id]);
                 
                 // クリックで選択（現在のプレイヤーのみ）
                 if (is_current_player && minoArea.leftClicked()) {
@@ -318,10 +315,10 @@ void Main() {
                 }
                 
                 if (mino_idx >= 0) {
-                    double x = minoListX + (displayed_count % 3) * 160;
-                    double y = minoListY + (displayed_count / 3) * 160;
+                    double x = minoListX + (displayed_count % 2) * 240;
+                    double y = minoListY + (displayed_count / 2) * 240;
                     
-                    RectF minoBox(x, y, 150, 150);
+                    RectF minoBox(x, y, 220, 220);
                     bool is_hovered = minoBox.mouseOver();
                     bool is_selected = (selected_unique_mino_idx == static_cast<int>(unique_idx));
                     
@@ -334,7 +331,7 @@ void Main() {
                     }
                     minoBox.drawFrame(2, 0, is_selected ? PlayerColors[current_player] : Color(200, 200, 200));
                     
-                    DrawMinoSmall(mino_idx, Vec2(x + 10, y + 10), 25, PlayerColors[current_player]);
+                    DrawMinoSmall(mino_idx, Vec2(x + 20, y + 20), 35, PlayerColors[current_player]);
                     
                     if (!is_ai[current_player] && minoBox.leftClicked()) {
                         selected_mino_index = mino_idx;
@@ -369,13 +366,13 @@ void Main() {
                 double mouseCellY = (mousePos.y - gridY) / cellSize;
                 
                 // ミノの中心を取得
-                Point minoCenter = GetMinoCenter(selected_mino_index);
-                int centerGridCol = minoCenter.x - 1;
-                int centerGridRow = minoCenter.y - 1;
+                Vec2 minoCenter = GetMinoCenterFloat(selected_mino_index);
+                double centerGridCol = minoCenter.x - 1.0;
+                double centerGridRow = minoCenter.y - 1.0;
                 
                 // マウス位置がミノの中心になるように配置位置を計算
-                int targetGridCol = static_cast<int>(Math::Round(mouseCellX)) - centerGridCol;
-                int targetGridRow = static_cast<int>(Math::Round(mouseCellY)) - centerGridRow;
+                int targetGridCol = static_cast<int>(Math::Round(mouseCellX - centerGridCol));
+                int targetGridRow = static_cast<int>(Math::Round(mouseCellY - centerGridRow));
                 int bit_pos = (targetGridRow + 1) * BOARD_WITH_WALL_SIZE + (targetGridCol + 1);
                 
                 bool can_place = false;
