@@ -5,6 +5,9 @@
 
 
 *.exe
+App
+Intermediate
+.vs
 
 # User-specific files
 *.rsuser
