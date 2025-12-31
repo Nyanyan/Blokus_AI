@@ -27,7 +27,6 @@ struct Move {
     int n_tried;
 };
 
-constexpr int BOARD_SIZE = 20;
 constexpr int CELL_EMPTY = -1;
 constexpr int N_PLAYERS = 4;
 constexpr double WIN_SCORE_BONUS = 10000.0;

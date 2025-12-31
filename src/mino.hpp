@@ -1,182 +1,472 @@
 #include <iostream>
 #include <vector>
+#include <bitset>
 
-constexpr int DNC = 0; // do not care
-constexpr int FIL = 1; // filled
-constexpr int CNR = 2; // corner
-constexpr int EDG = 3; // edge
+constexpr int BOARD_SIZE = 20; // board size
+constexpr int BOARD_WITH_WALL_SIZE = BOARD_SIZE + 2;
+constexpr int BOARD_BIT_SIZE = BOARD_WITH_WALL_SIZE * BOARD_WITH_WALL_SIZE;
+
+constexpr int N_MINO_CELL_TYPE = 3; // セルタイプ数
+constexpr int FIL_IDX = 0; // filled
+constexpr int CNR_IDX = 1; // corner
+constexpr int EDG_IDX = 2; // edge
 
 struct Mino {
-    std::vector<std::vector<int>> mino;
-    size_t h;
-    size_t w;
+    std::bitset<BOARD_BIT_SIZE> mino[N_MINO_CELL_TYPE];
     int size;
     std::vector<int> families;
     bool usable = true;
 
     void compute_size() {
-        size = 0;
-        for (const auto& row : mino) {
-            for (const auto& cell : row) {
-                if (cell == FIL) {
-                    ++size;
-                }
-            }
-        }
+        size = mino[FIL_IDX].count();
     }
 };
 
 
-
-const std::vector<std::vector<int>> M1 = {
-    {CNR, EDG, CNR},
-    {EDG, FIL, EDG},
-    {CNR, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M1[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000010"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000101"
+        "0000000000000000000000"
+        "0000000000000000000101"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000010"
+        "0000000000000000000101"
+        "0000000000000000000010"
+    )
 };
 
-const std::vector<std::vector<int>> M2 = {
-    {CNR, EDG, EDG, CNR},
-    {EDG, FIL, FIL, EDG},
-    {CNR, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M2[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001001"
+        "0000000000000000000000"
+        "0000000000000000001001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000110"
+        "0000000000000000001001"
+        "0000000000000000000110"
+    )
 };
 
-const std::vector<std::vector<int>> M3V = {
-    {DNC, CNR, EDG, CNR},
-    {CNR, EDG, FIL, EDG},
-    {EDG, FIL, FIL, EDG},
-    {CNR, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M3V[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000010"
+        "0000000000000000000110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000101"
+        "0000000000000000001000"
+        "0000000000000000000000"
+        "0000000000000000001001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000010"
+        "0000000000000000000101"
+        "0000000000000000001001"
+        "0000000000000000000110"
+    )
 };
 
-const std::vector<std::vector<int>> M3I = {
-    {CNR, EDG, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M3I[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010001"
+        "0000000000000000000000"
+        "0000000000000000010001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001110"
+        "0000000000000000010001"
+        "0000000000000000001110"
+    )
 };
 
-const std::vector<std::vector<int>> M4I = {
-    {CNR, EDG, EDG, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M4I[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000011110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000100001"
+        "0000000000000000000000"
+        "0000000000000000100001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000011110"
+        "0000000000000000100001"
+        "0000000000000000011110"
+    )
 };
 
-const std::vector<std::vector<int>> M4L = {
-    {CNR, EDG, CNR, DNC, DNC},
-    {EDG, FIL, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M4L[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001000"
+        "0000000000000000001110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010100"
+        "0000000000000000000001"
+        "0000000000000000000000"
+        "0000000000000000010001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001000"
+        "0000000000000000010110"
+        "0000000000000000010001"
+        "0000000000000000001110"
+    )
 };
 
-const std::vector<std::vector<int>> M4N = {
-    {CNR, EDG, EDG, CNR, DNC},
-    {EDG, FIL, FIL, EDG, CNR},
-    {CNR, EDG, FIL, FIL, EDG},
-    {DNC, CNR, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M4N[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001100"
+        "0000000000000000000110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010010"
+        "0000000000000000000001"
+        "0000000000000000010000"
+        "0000000000000000001001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001100"
+        "0000000000000000010010"
+        "0000000000000000001001"
+        "0000000000000000000110"
+    )
 };
 
-const std::vector<std::vector<int>> M4P = {
-    {CNR, EDG, EDG, CNR},
-    {EDG, FIL, FIL, EDG},
-    {EDG, FIL, FIL, EDG},
-    {CNR, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M4P[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000110"
+        "0000000000000000000110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001001"
+        "0000000000000000000000"
+        "0000000000000000000000"
+        "0000000000000000001001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000110"
+        "0000000000000000001001"
+        "0000000000000000001001"
+        "0000000000000000000110"
+    )
 };
 
-const std::vector<std::vector<int>> M4T = {
-    {CNR, EDG, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, FIL, EDG, CNR},
-    {DNC, CNR, EDG, CNR, DNC}
+const std::bitset<BOARD_BIT_SIZE> M4T[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001110"
+        "0000000000000000000100"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010001"
+        "0000000000000000000000"
+        "0000000000000000010001"
+        "0000000000000000001010"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001110"
+        "0000000000000000010001"
+        "0000000000000000001010"
+        "0000000000000000000100"
+    )
 };
 
-const std::vector<std::vector<int>> M5F = {
-    {DNC, CNR, EDG, EDG, CNR},
-    {CNR, EDG, FIL, FIL, EDG},
-    {EDG, FIL, FIL, EDG, CNR},
-    {CNR, EDG, FIL, EDG, DNC},
-    {DNC, CNR, EDG, CNR, DNC}
+const std::bitset<BOARD_BIT_SIZE> M5F[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000110"
+        "0000000000000000001100"
+        "0000000000000000000100"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001001"
+        "0000000000000000010000"
+        "0000000000000000000001"
+        "0000000000000000010000"
+        "0000000000000000001010"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000110"
+        "0000000000000000001001"
+        "0000000000000000010010"
+        "0000000000000000001010"
+        "0000000000000000000100"
+    )
 };
 
-const std::vector<std::vector<int>> M5I = {
-    {CNR, EDG, EDG, EDG, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M5I[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000111110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000001000001"
+        "0000000000000000000000"
+        "0000000000000001000001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000111110"
+        "0000000000000001000001"
+        "0000000000000000111110"
+    )
 };
 
-const std::vector<std::vector<int>> M5L = {
-    {CNR, EDG, CNR, DNC, DNC, DNC},
-    {EDG, FIL, EDG, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M5L[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000010000"
+        "0000000000000000011110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000101000"
+        "0000000000000000000001"
+        "0000000000000000000000"
+        "0000000000000000100001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010000"
+        "0000000000000000101110"
+        "0000000000000000100001"
+        "0000000000000000011110"
+    )
 };
 
-const std::vector<std::vector<int>> M5N = {
-    {DNC, DNC, CNR, EDG, EDG, CNR},
-    {CNR, EDG, EDG, FIL, FIL, EDG},
-    {EDG, FIL, FIL, FIL, EDG, CNR},
-    {CNR, EDG, EDG, EDG, CNR, DNC}
+const std::bitset<BOARD_BIT_SIZE> M5N[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000110"
+        "0000000000000000011100"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001001"
+        "0000000000000000100000"
+        "0000000000000000000001"
+        "0000000000000000100010"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000110"
+        "0000000000000000011001"
+        "0000000000000000100010"
+        "0000000000000000011100"
+    )
 };
 
-const std::vector<std::vector<int>> M5P = {
-    {CNR, EDG, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, FIL, FIL, EDG},
-    {DNC, CNR, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M5P[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001110"
+        "0000000000000000000110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010001"
+        "0000000000000000000000"
+        "0000000000000000010000"
+        "0000000000000000001001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001110"
+        "0000000000000000010001"
+        "0000000000000000001001"
+        "0000000000000000000110"
+    )
 };
 
-const std::vector<std::vector<int>> M5T = {
-    {CNR, EDG, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, FIL, EDG, CNR},
-    {DNC, EDG, FIL, EDG, DNC},
-    {DNC, CNR, EDG, CNR, DNC}
+const std::bitset<BOARD_BIT_SIZE> M5T[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001110"
+        "0000000000000000000100"
+        "0000000000000000000100"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010001"
+        "0000000000000000000000"
+        "0000000000000000010001"
+        "0000000000000000000000"
+        "0000000000000000001010"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001110"
+        "0000000000000000010001"
+        "0000000000000000001010"
+        "0000000000000000001010"
+        "0000000000000000000100"
+    )
 };
 
-const std::vector<std::vector<int>> M5U = {
-    {CNR, EDG, CNR, EDG, CNR},
-    {EDG, FIL, EDG, FIL, EDG},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M5U[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001010"
+        "0000000000000000001110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010101"
+        "0000000000000000000000"
+        "0000000000000000000000"
+        "0000000000000000010001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001010"
+        "0000000000000000010101"
+        "0000000000000000010001"
+        "0000000000000000001110"
+    )
 };
 
-const std::vector<std::vector<int>> M5V = {
-    {DNC, DNC, CNR, EDG, CNR},
-    {DNC, DNC, EDG, FIL, EDG},
-    {CNR, EDG, EDG, FIL, EDG},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M5V[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000010"
+        "0000000000000000000010"
+        "0000000000000000001110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000101"
+        "0000000000000000000000"
+        "0000000000000000010000"
+        "0000000000000000000000"
+        "0000000000000000010001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000010"
+        "0000000000000000000101"
+        "0000000000000000001101"
+        "0000000000000000010001"
+        "0000000000000000001110"
+    )
 };
 
-const std::vector<std::vector<int>> M5W = {
-    {DNC, DNC, CNR, EDG, CNR},
-    {DNC, CNR, EDG, FIL, EDG},
-    {CNR, EDG, FIL, FIL, EDG},
-    {EDG, FIL, FIL, EDG, CNR},
-    {CNR, EDG, EDG, CNR, DNC}
+const std::bitset<BOARD_BIT_SIZE> M5W[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000010"
+        "0000000000000000000110"
+        "0000000000000000001100"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000101"
+        "0000000000000000001000"
+        "0000000000000000010000"
+        "0000000000000000000001"
+        "0000000000000000010010"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000010"
+        "0000000000000000000101"
+        "0000000000000000001001"
+        "0000000000000000010010"
+        "0000000000000000001100"
+    )
 };
 
-
-const std::vector<std::vector<int>> M5X = {
-    {DNC, CNR, EDG, CNR, DNC},
-    {CNR, EDG, FIL, EDG, CNR},
-    {EDG, FIL, FIL, FIL, EDG},
-    {CNR, EDG, FIL, EDG, CNR},
-    {DNC, CNR, EDG, CNR, DNC}
+const std::bitset<BOARD_BIT_SIZE> M5X[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000000100"
+        "0000000000000000001110"
+        "0000000000000000000100"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001010"
+        "0000000000000000010001"
+        "0000000000000000000000"
+        "0000000000000000010001"
+        "0000000000000000001010"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000100"
+        "0000000000000000001010"
+        "0000000000000000010001"
+        "0000000000000000001010"
+        "0000000000000000000100"
+    )
 };
 
-
-const std::vector<std::vector<int>> M5Y = {
-    {DNC, CNR, EDG, CNR, DNC, DNC},
-    {CNR, EDG, FIL, EDG, EDG, CNR},
-    {EDG, FIL, FIL, FIL, FIL, EDG},
-    {CNR, EDG, EDG, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M5Y[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001000"
+        "0000000000000000011110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010100"
+        "0000000000000000100001"
+        "0000000000000000000000"
+        "0000000000000000100001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001000"
+        "0000000000000000010110"
+        "0000000000000000100001"
+        "0000000000000000011110"
+    )
 };
 
-const std::vector<std::vector<int>> M5Z = {
-    {CNR, EDG, EDG, CNR, DNC},
-    {EDG, FIL, FIL, EDG, DNC},
-    {CNR, EDG, FIL, EDG, CNR},
-    {DNC, EDG, FIL, FIL, EDG},
-    {DNC, CNR, EDG, EDG, CNR}
+const std::bitset<BOARD_BIT_SIZE> M5Z[N_MINO_CELL_TYPE] = {
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000000000"
+        "0000000000000000001100"
+        "0000000000000000000100"
+        "0000000000000000000110"
+        "0000000000000000000000"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000010010"
+        "0000000000000000000000"
+        "0000000000000000010001"
+        "0000000000000000000000"
+        "0000000000000000001001"
+    ),
+    std::bitset<BOARD_BIT_SIZE>(
+        "0000000000000000001100"
+        "0000000000000000010010"
+        "0000000000000000001010"
+        "0000000000000000001001"
+        "0000000000000000000110"
+    )
 };
+
 
 
 std::vector<Mino> unique_minos = {
