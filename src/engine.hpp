@@ -17,7 +17,6 @@ struct Node {
 
 
 Move get_best_move_mc(Board& board, int player_id) {
-    uint64_t strt_all = tim();
     Player& player = board.players[player_id];
     std::vector<Move> legal_moves = board.generate_legal_moves(player_id, player.is_first_move);
     
@@ -50,10 +49,12 @@ Move get_best_move_mc(Board& board, int player_id) {
             best_move = &move;
         }
     }
-    std::cerr << "Best move chosen at pos " << best_move->pos << " with mino " << best_move->mino_index << " having MC score: " << best_move->mcts_score << " elapsed " << (tim() - strt_all) << " ms\n";
     return *best_move;
 }
 
 Move get_best_move(Board& board, int player_id) {
-    return get_best_move_mc(board, player_id);
+    uint64_t strt_all = tim();
+    Move res = get_best_move_mc(board, player_id);
+    std::cerr << "Best move chosen at pos " << res.pos << " with mino " << res.mino_index << " having MC score: " << res.mcts_score << " elapsed " << (tim() - strt_all) << " ms\n";
+    return res;
 }
