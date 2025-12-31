@@ -9,6 +9,15 @@ const Color PlayerColors[N_PLAYERS] = {
     Color(50, 100, 220)   // プレイヤー3: 青
 };
 
+// ミノの範囲情報を格納する構造体
+struct MinoBounds {
+    int minRow, minCol;
+    int width, height;
+};
+
+// 各ミノの範囲情報をキャッシュ
+std::vector<MinoBounds> all_minos_bounds;
+
 // ミノをグリッドに描画する関数
 void DrawMinoOnGrid(const Mino& mino, int pos, const Color& color, double gridX, double gridY, double cellSize, double alpha = 1.0) {
     auto shifted_mino = mino << pos;
@@ -25,44 +34,47 @@ void DrawMinoOnGrid(const Mino& mino, int pos, const Color& color, double gridX,
     }
 }
 
-// ミノの中心位置（FIL_IDXの範囲の中心）を計算する関数
-Point GetMinoCenter(const Mino& mino) {
-    int minRow = BOARD_SIZE + 1, maxRow = 0, minCol = BOARD_SIZE + 1, maxCol = 0;
-    for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
-        if (mino.mino[FIL_IDX][bit_pos]) {
-            int row = bit_pos / BOARD_WITH_WALL_SIZE;
-            int col = bit_pos % BOARD_WITH_WALL_SIZE;
-            minRow = std::min(minRow, row);
-            maxRow = std::max(maxRow, row);
-            minCol = std::min(minCol, col);
-            maxCol = std::max(maxCol, col);
+// すべてのミノの範囲情報を事前計算する関数
+void init_minos_bounds() {
+    all_minos_bounds.resize(all_minos.size());
+    for (size_t i = 0; i < all_minos.size(); ++i) {
+        const Mino& mino = all_minos[i];
+        int minRow = BOARD_SIZE + 1, maxRow = 0, minCol = BOARD_SIZE + 1, maxCol = 0;
+        for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+            if (mino.mino[FIL_IDX][bit_pos]) {
+                int row = bit_pos / BOARD_WITH_WALL_SIZE;
+                int col = bit_pos % BOARD_WITH_WALL_SIZE;
+                minRow = std::min(minRow, row);
+                maxRow = std::max(maxRow, row);
+                minCol = std::min(minCol, col);
+                maxCol = std::max(maxCol, col);
+            }
         }
+        all_minos_bounds[i].minRow = minRow;
+        all_minos_bounds[i].minCol = minCol;
+        all_minos_bounds[i].width = maxCol - minCol + 1;
+        all_minos_bounds[i].height = maxRow - minRow + 1;
     }
-    // 範囲の中心を返す（小数点以下切り捨て）
-    return Point((minCol + maxCol) / 2, (minRow + maxRow) / 2);
+}
+
+// ミノの中心位置（FIL_IDXの範囲の中心）を取得する関数
+Point GetMinoCenter(int mino_index) {
+    const MinoBounds& bounds = all_minos_bounds[mino_index];
+    // 範囲の中心を返す
+    return Point(bounds.minCol + bounds.width / 2, bounds.minRow + bounds.height / 2);
 }
 
 // ミノを小さく描画する関数（残りミノ表示用）
-void DrawMinoSmall(const Mino& mino, const Vec2& pos, double cellSize, const Color& color) {
-    // ミノの範囲を計算
-    int minRow = BOARD_SIZE + 1, maxRow = 0, minCol = BOARD_SIZE + 1, maxCol = 0;
-    for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
-        if (mino.mino[FIL_IDX][bit_pos]) {
-            int row = bit_pos / BOARD_WITH_WALL_SIZE;
-            int col = bit_pos % BOARD_WITH_WALL_SIZE;
-            minRow = std::min(minRow, row);
-            maxRow = std::max(maxRow, row);
-            minCol = std::min(minCol, col);
-            maxCol = std::max(maxCol, col);
-        }
-    }
+void DrawMinoSmall(int mino_index, const Vec2& pos, double cellSize, const Color& color) {
+    const Mino& mino = all_minos[mino_index];
+    const MinoBounds& bounds = all_minos_bounds[mino_index];
     
     // ミノを描画
     for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
         if (mino.mino[FIL_IDX][bit_pos]) {
             int row = bit_pos / BOARD_WITH_WALL_SIZE;
             int col = bit_pos % BOARD_WITH_WALL_SIZE;
-            RectF cell(pos.x + (col - minCol) * cellSize, pos.y + (row - minRow) * cellSize, cellSize, cellSize);
+            RectF cell(pos.x + (col - bounds.minCol) * cellSize, pos.y + (row - bounds.minRow) * cellSize, cellSize, cellSize);
             cell.draw(color);
             cell.drawFrame(1, 0, ColorF(0, 0, 0, 0.5));
         }
@@ -73,6 +85,8 @@ void Main() {
 	Console.open();
     init_unique_minos();
     init_all_minos();
+
+	init_minos_bounds();  // ミノの範囲情報を事前計算
 
     // ウィンドウサイズを設定
     Window::Resize(1600, 900);
@@ -192,7 +206,7 @@ void Main() {
             double mouseCellY = (mousePos.y - gridY) / cellSize;
             
             // ミノの中心を取得
-            Point minoCenter = GetMinoCenter(mino);
+            Point minoCenter = GetMinoCenter(selected_mino_index);
             
             // マウス位置がミノの中心になるように、ミノの配置位置（bit_pos）を計算
             // minoCenterは壁を含む座標なので、1を引いてグリッド座標に変換
@@ -272,7 +286,7 @@ void Main() {
                     minoArea.draw(ColorF(0.9, 0.9, 0.9, 0.5));
                 }
                 
-                DrawMinoSmall(board.players[player_id].minos[mino_idx], Vec2(x, y), 4.5, PlayerColors[player_id]);
+                DrawMinoSmall(mino_idx, Vec2(x, y), 4.5, PlayerColors[player_id]);
                 
                 // クリックで選択（現在のプレイヤーのみ）
                 if (is_current_player && minoArea.leftClicked()) {
@@ -320,7 +334,7 @@ void Main() {
                     }
                     minoBox.drawFrame(2, 0, is_selected ? PlayerColors[current_player] : Color(200, 200, 200));
                     
-                    DrawMinoSmall(board.players[current_player].minos[mino_idx], Vec2(x + 10, y + 10), 25, PlayerColors[current_player]);
+                    DrawMinoSmall(mino_idx, Vec2(x + 10, y + 10), 25, PlayerColors[current_player]);
                     
                     if (!is_ai[current_player] && minoBox.leftClicked()) {
                         selected_mino_index = mino_idx;
@@ -355,7 +369,7 @@ void Main() {
                 double mouseCellY = (mousePos.y - gridY) / cellSize;
                 
                 // ミノの中心を取得
-                Point minoCenter = GetMinoCenter(mino);
+                Point minoCenter = GetMinoCenter(selected_mino_index);
                 int centerGridCol = minoCenter.x - 1;
                 int centerGridRow = minoCenter.y - 1;
                 
