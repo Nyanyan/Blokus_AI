@@ -43,6 +43,7 @@ Move get_best_move(Board& board, int player_id) {
             best_move = &move;
         }
     }
+    std::cerr << "Best move chosen at (" << best_move->top << ", " << best_move->left << ") with mino " << best_move->mino_index << " having MC score: " << best_move->mcts_score << "\n";
     return *best_move;
 }
 
