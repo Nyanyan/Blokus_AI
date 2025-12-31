@@ -17,6 +17,14 @@ struct Mino {
     std::vector<int> families;
     bool usable = true;
 
+    Mino() = default;
+    
+    Mino(const std::bitset<BOARD_BIT_SIZE> (&data)[N_MINO_CELL_TYPE]) {
+        for (int i = 0; i < N_MINO_CELL_TYPE; ++i) {
+            mino[i] = data[i];
+        }
+    }
+
     void compute_size() {
         size = mino[FIL_IDX].count();
     }
@@ -481,20 +489,39 @@ std::vector<Mino> unique_minos = {
 std::vector<Mino> all_minos;
 
 
+// 指定した行のビット列を取得
+std::bitset<BOARD_WITH_WALL_SIZE> get_row_bits(const std::bitset<BOARD_BIT_SIZE>& bitset, int row) {
+    std::bitset<BOARD_WITH_WALL_SIZE> row_bits;
+    int start_pos = row * BOARD_WITH_WALL_SIZE;
+    
+    for (int j = 0; j < BOARD_WITH_WALL_SIZE; ++j) {
+        row_bits[j] = bitset[start_pos + j];
+    }
+    
+    return row_bits;
+}
+
 
 void print_mino(const Mino& mino) {
     for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
+        auto fil_row = get_row_bits(mino.mino[FIL_IDX], i);
+        auto cnr_row = get_row_bits(mino.mino[CNR_IDX], i);
+        auto edg_row = get_row_bits(mino.mino[EDG_IDX], i);
+        
+        // // この行にビットが1つでも立っているかチェック
+        // if (fil_row.none() && cnr_row.none() && edg_row.none()) {
+        //     continue;
+        // }
+        
         for (int j = 0; j < BOARD_WITH_WALL_SIZE; ++j) {
-            int bit_pos = i * BOARD_WITH_WALL_SIZE + j;
-            
-            if (mino.mino[FIL_IDX][bit_pos]) {
+            if (fil_row[j]) {
                 std::cout << "#";
-            } else if (mino.mino[CNR_IDX][bit_pos]) {
+            } else if (cnr_row[j]) {
                 std::cout << ".";
-            } else if (mino.mino[EDG_IDX][bit_pos]) {
+            } else if (edg_row[j]) {
                 std::cout << "-";
             } else {
-                std::cout << " ";
+                std::cout << "$";
             }
         }
         std::cout << '\n';
@@ -503,43 +530,53 @@ void print_mino(const Mino& mino) {
 
 // 90度時計回りに回転
 Mino rotate90(const Mino& mino) {
-    size_t new_h = mino.w;
-    size_t new_w = mino.h;
-    std::vector<std::vector<int>> rotated(new_h, std::vector<int>(new_w));
+    Mino rotated;
     
-    for (size_t i = 0; i < mino.h; ++i) {
-        for (size_t j = 0; j < mino.w; ++j) {
-            rotated[j][mino.h - 1 - i] = mino.mino[i][j];
+    for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+        rotated.mino[cell_type].reset();
+        
+        for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
+            for (int j = 0; j < BOARD_WITH_WALL_SIZE; ++j) {
+                int src_pos = i * BOARD_WITH_WALL_SIZE + j;
+                int dst_pos = j * BOARD_WITH_WALL_SIZE + (BOARD_WITH_WALL_SIZE - 1 - i);
+                
+                if (mino.mino[cell_type][src_pos]) {
+                    rotated.mino[cell_type][dst_pos] = 1;
+                }
+            }
         }
     }
     
-    return {rotated, new_h, new_w};
+    return rotated;
 }
 
 // 左右反転
 Mino flip_horizontal(const Mino& mino) {
-    std::vector<std::vector<int>> flipped = mino.mino;
+    Mino flipped;
     
-    for (size_t i = 0; i < mino.h; ++i) {
-        for (size_t j = 0; j < mino.w / 2; ++j) {
-            std::swap(flipped[i][j], flipped[i][mino.w - 1 - j]);
+    for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+        flipped.mino[cell_type].reset();
+        
+        for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
+            for (int j = 0; j < BOARD_WITH_WALL_SIZE; ++j) {
+                int src_pos = i * BOARD_WITH_WALL_SIZE + j;
+                int dst_pos = i * BOARD_WITH_WALL_SIZE + (BOARD_WITH_WALL_SIZE - 1 - j);
+                
+                if (mino.mino[cell_type][src_pos]) {
+                    flipped.mino[cell_type][dst_pos] = 1;
+                }
+            }
         }
     }
     
-    return {flipped, mino.h, mino.w};
+    return flipped;
 }
 
 // 2つのミノが同一かどうかを判定
 bool is_same_mino(const Mino& m1, const Mino& m2) {
-    if (m1.h != m2.h || m1.w != m2.w) {
-        return false;
-    }
-    
-    for (size_t i = 0; i < m1.h; ++i) {
-        for (size_t j = 0; j < m1.w; ++j) {
-            if (m1.mino[i][j] != m2.mino[i][j]) {
-                return false;
-            }
+    for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+        if (m1.mino[cell_type] != m2.mino[cell_type]) {
+            return false;
         }
     }
     
