@@ -246,14 +246,16 @@ struct Board {
         Player& player = players[player_id];
         Mino& mino = player.minos[move.mino_index];
         
-        // ミノを盤面に配置
-        std::bitset<BOARD_BIT_SIZE> put_mino = mino.mino[FIL_IDX] << move.pos;
-        cells[player_id] |= put_mino;
-        silhouette |= put_mino;
+        // ミノを盤面に配置（一時変数を削減）
+        const std::bitset<BOARD_BIT_SIZE> shifted_mino = mino.mino[FIL_IDX] << move.pos;
+        cells[player_id] |= shifted_mino;
+        silhouette |= shifted_mino;
 
         // 使用したミノとそのfamilyの全てを使用不可にする
-        for (int family_idx : mino.families) {
-            player.minos[family_idx].usable = false;
+        const std::vector<int>& families = mino.families;
+        std::vector<Mino>& minos = player.minos;
+        for (size_t i = 0, n = families.size(); i < n; ++i) {
+            minos[families[i]].usable = false;
         }
         
         // remaining_mino_sizeを更新
@@ -349,6 +351,9 @@ struct Board {
     }
 
     Move get_random_move(int player_id) {
+        // staticで乱数生成器を再利用（大幅な高速化）
+        static std::mt19937 gen(std::random_device{}());
+        
         Player& player = players[player_id];
         std::vector<Move> legal_moves = generate_legal_moves(player_id, player.is_first_move);
         
@@ -356,8 +361,6 @@ struct Board {
             return {-1, -1, MINO_IDX_PASS}; // パス
         }
         
-        std::random_device rd;
-        std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, legal_moves.size() - 1);
         int move_idx = dis(gen);
         
@@ -368,6 +371,7 @@ struct Board {
         // start_player_idからランダムにゲームを進行させる関数
         int current_player = start_player_id;
         int consecutive_passes = 0;
+        
         while (consecutive_passes < N_PLAYERS) {
             // print_board();
             
@@ -375,8 +379,8 @@ struct Board {
             Move move = get_random_move(current_player);
             
             if (move.mino_index == MINO_IDX_PASS) {
-                // パス
-                history[current_player].push_back(move);
+                // パス（history追加を省略して高速化）
+                // history[current_player].push_back(move);
                 // std::cerr << "Player " << current_player << " passes.\n";
                 consecutive_passes++;
             } else {
