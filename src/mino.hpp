@@ -1,3 +1,5 @@
+#include <iostream>
+#include <vector>
 
 constexpr int DNC = 0; // do not care
 constexpr int FIL = 1; // filled
