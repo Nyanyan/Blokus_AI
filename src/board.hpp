@@ -52,19 +52,24 @@ struct Board {
         // 最初のミノを pos に置けるか判定する関数
         // minoのCNRが盤面の隅に来ること、minoのFILがすべて空であることが条件。
 
-        // 各プレイヤーの開始位置（四隅）
-        static const int corner_positions[4][2] = {
-            {0, 0},                    // プレイヤー0: 左上
-            {0, BOARD_SIZE + 1},       // プレイヤー1: 右上
-            {BOARD_SIZE + 1, BOARD_SIZE + 1},  // プレイヤー2: 右下
-            {BOARD_SIZE + 1, 0}        // プレイヤー3: 左下
+        // 各プレイヤーの開始位置（四隅）のインデックス
+        static const int corner_indices[4] = {
+            0,                                      // プレイヤー0: 左上
+            BOARD_SIZE + 1,                         // プレイヤー1: 右上
+            (BOARD_SIZE + 1) * BOARD_WITH_WALL_SIZE + BOARD_SIZE + 1,  // プレイヤー2: 右下
+            (BOARD_SIZE + 1) * BOARD_WITH_WALL_SIZE  // プレイヤー3: 左下
         };
 
         // if (player_id != 0) {
         //     std::cerr << corner.to_string() << std::endl;
         // }
 
-        if (!mino.shiftable_left(pos)) { // シフトできない
+        // シフトと範囲チェックを同時に実行（shiftable_leftの内容を統合）
+        const std::bitset<BOARD_BIT_SIZE>& fil = mino.mino[FIL_IDX];
+        std::bitset<BOARD_BIT_SIZE> shifted_fil = fil << pos;
+        
+        // 範囲外チェック（shiftable_leftの代替）
+        if ((shifted_fil & BOARD_MASK).count() != fil.count()) {
             // if (player_id != 0) {
             //     std::cerr << "not shiftable " << pos << std::endl;
             //     print_mino(mino);
@@ -72,8 +77,6 @@ struct Board {
             return false;
         }
         
-        // コピーを避けてシフト後のビットを直接計算
-        std::bitset<BOARD_BIT_SIZE> shifted_fil = mino.mino[FIL_IDX] << pos;
         if ((shifted_fil & silhouette).any()) { // 既存の石と被っている
             // if (player_id != 0) {
             //     std::cerr << "overlap with existing stones" << std::endl;
@@ -82,9 +85,7 @@ struct Board {
         }
         
         // 盤の隅(壁内)にCNRが来ているかチェック
-        int corner_idx = corner_positions[player_id][0] * BOARD_WITH_WALL_SIZE + corner_positions[player_id][1];
-        std::bitset<BOARD_BIT_SIZE> shifted_cnr = mino.mino[CNR_IDX] << pos;
-        if (!shifted_cnr[corner_idx]) { // 盤の隅(壁内)にCNRが来ていない
+        if (!(mino.mino[CNR_IDX] << pos)[corner_indices[player_id]]) {
             // if (player_id != 0) {
             //     std::cerr << "corner not covered" << std::endl;
             // }
@@ -98,24 +99,29 @@ struct Board {
         // ミノを pos に置けるか判定する関数
         // minoのCNRに1つ以上自分の色があること、minoのすべてのEDGに自分の色がないこと、minoのFILがすべてCELL_EMPTYであることが条件。
         
-        if (!mino.shiftable_left(pos)) { // シフトできない
+        // 全てのシフト演算を先に実行（CPU並列化の可能性）
+        const std::bitset<BOARD_BIT_SIZE>& fil = mino.mino[FIL_IDX];
+        std::bitset<BOARD_BIT_SIZE> shifted_fil = fil << pos;
+        
+        // 範囲外チェック（shiftable_leftの代替）- count()は重いが必要
+        if ((shifted_fil & BOARD_MASK).count() != fil.count()) {
             return false;
         }
         
-        // コピーを避けてシフト後のビットを直接計算
-        std::bitset<BOARD_BIT_SIZE> shifted_fil = mino.mino[FIL_IDX] << pos;
         if ((shifted_fil & silhouette).any()) { // 既存の石と被っている
             return false;
         }
         
+        // player_cellsを一度だけ参照
         const std::bitset<BOARD_BIT_SIZE>& player_cells = cells[player_id];
-        std::bitset<BOARD_BIT_SIZE> shifted_edg = mino.mino[EDG_IDX] << pos;
-        if ((shifted_edg & player_cells).any()) { // 辺が自分の石と接している
+        
+        // EDGチェック（失敗しやすいので先に）
+        if (((mino.mino[EDG_IDX] << pos) & player_cells).any()) {
             return false;
         }
         
-        std::bitset<BOARD_BIT_SIZE> shifted_cnr = mino.mino[CNR_IDX] << pos;
-        if ((shifted_cnr & player_cells).none()) { // 角が自分の石と接していない
+        // CNRチェック（最後に）
+        if (((mino.mino[CNR_IDX] << pos) & player_cells).none()) {
             return false;
         }
         
