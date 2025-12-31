@@ -150,7 +150,6 @@ struct Board {
                 for (size_t i = 0; i < player_bits.size(); ++i) {
                     for (size_t j = 0; j < corner_bits.size(); ++j) {
                         int pos = player_bits[i] - corner_bits[j];
-                        // int pos = corner_bits[j] - player_bits[i];
                         if (pos >= 0) {
                             possible_positions.insert(pos);
                         }
@@ -171,6 +170,39 @@ struct Board {
                     }
                 }
             }
+
+            // debugging...
+            // for (int pos = 0; pos <= BOARD_BIT_SIZE; ++pos) {
+            //     if (is_first_move) {
+            //         if (puttable_first(mino, pos, player_id)) {
+            //             // legal_movesにposが入っているかチェック。入ってなかったらエラーの表示をする
+            //             bool found = false;
+            //             for (const auto& move : legal_moves) {
+            //                 if (move.pos == pos && move.mino_index == static_cast<int>(mino_index)) {
+            //                     found = true;
+            //                     break;
+            //                 }
+            //             }
+            //             if (!found) {
+            //                 std::cerr << "ERROR: pos " << pos << " with mino " << mino_index << " is puttable but not in legal_moves (first_move)\n";
+            //             }
+            //         }
+            //     } else {
+            //         if (puttable(mino, pos, player_id)) {
+            //             // legal_movesにposが入っているかチェック。入ってなかったらエラーの表示をする
+            //             bool found = false;
+            //             for (const auto& move : legal_moves) {
+            //                 if (move.pos == pos && move.mino_index == static_cast<int>(mino_index)) {
+            //                     found = true;
+            //                     break;
+            //                 }
+            //             }
+            //             if (!found) {
+            //                 std::cerr << "ERROR: pos " << pos << " with mino " << mino_index << " is puttable but not in legal_moves\n";
+            //             }
+            //         }
+            //     }
+            // }
         }
         // std::cerr << legal_moves.size() << " legal moves generated for Player " << player_id << (is_first_move ? " (first move)" : "") << ".\n";
         return legal_moves;
