@@ -29,33 +29,162 @@ struct Mino {
 struct Player {
     std::vector<Mino> minos;
     int remaining_mino_size;
+    bool is_first_move = true;
+
     Player() {
         minos = all_minos;
         remaining_mino_size = 0;
         for (const auto &mino: unique_minos) {
             remaining_mino_size += mino.size;
         }
+        is_first_move = true;
     }
+};
+
+struct Move {
+    int top;
+    int left;
+    int mino_index;
 };
 
 constexpr int BOARD_SIZE = 20;
 constexpr int CELL_EMPTY = -1;
+constexpr int N_PLAYERS = 4;
 
 struct Board {
     int cells[BOARD_SIZE + 2][BOARD_SIZE + 2];
-    Player players[4];
+    Player players[N_PLAYERS];
+    std::vector<std::vector<Move>> history;
+    
     Board() {
         for (int i = 0; i < BOARD_SIZE + 2; ++i) {
             for (int j = 0; j < BOARD_SIZE + 2; ++j) {
                 cells[i][j] = CELL_EMPTY;
             }
         }
+        history.resize(N_PLAYERS);
+    }
+
+    bool puttable_first(Mino mino, int top, int left, int player_id) {
+        // 最初のミノを (top, left) に置けるか判定する関数
+        // minoのCNRが盤面の隅に来ること、minoのFILがすべてCELL_EMPTYであることが条件。
+
+        // 各プレイヤーの開始位置（四隅）
+        int corner_positions[4][2] = {
+            {0, 0},                    // プレイヤー0: 左上
+            {0, BOARD_SIZE + 1},       // プレイヤー1: 右上
+            {BOARD_SIZE + 1, BOARD_SIZE + 1},  // プレイヤー2: 右下
+            {BOARD_SIZE + 1, 0}        // プレイヤー3: 左下
+        };
+        
+        int corner_i = corner_positions[player_id][0];
+        int corner_j = corner_positions[player_id][1];
+        
+        bool touches_corner = false;
+        
+        for (size_t i = 0; i < mino.h; ++i) {
+            for (size_t j = 0; j < mino.w; ++j) {
+                int board_i = top + i;
+                int board_j = left + j;
+                
+                // ボードの範囲外チェック
+                if (board_i < 0 || board_i >= BOARD_SIZE + 2 || 
+                    board_j < 0 || board_j >= BOARD_SIZE + 2) {
+                    return false;
+                }
+                
+                int cell_type = mino.mino[i][j];
+                int board_cell = cells[board_i][board_j];
+                
+                if (cell_type == FIL) {
+                    // FILのセルは空でなければならない
+                    if (board_cell != CELL_EMPTY) {
+                        return false;
+                    }
+                } else if (cell_type == CNR) {
+                    // CNRのセルが盤面の隅と一致するかチェック
+                    if (board_i == corner_i && board_j == corner_j) {
+                        touches_corner = true;
+                    }
+                }
+            }
+        }
+        
+        // 盤面の隅に接している必要がある
+        return touches_corner;
     }
 
     bool puttable(Mino mino, int top, int left, int player_id) {
         // ミノを (top, left) に置けるか判定する関数
-        // 実装は省略
-        return true; // 仮実装
+        // minoのCNRに1つ以上自分の色があること、minoのすべてのEDGに自分の色がないこと、minoのFILがすべてCELL_EMPTYであることが条件。
+        
+        bool has_corner = false;
+        
+        for (size_t i = 0; i < mino.h; ++i) {
+            for (size_t j = 0; j < mino.w; ++j) {
+                int board_i = top + i;
+                int board_j = left + j;
+                
+                // ボードの範囲外チェック
+                if (board_i < 0 || board_i >= BOARD_SIZE + 2 || 
+                    board_j < 0 || board_j >= BOARD_SIZE + 2) {
+                    return false;
+                }
+                
+                int cell_type = mino.mino[i][j];
+                int board_cell = cells[board_i][board_j];
+                
+                if (cell_type == FIL) {
+                    // FILのセルは空でなければならない
+                    if (board_cell != CELL_EMPTY) {
+                        return false;
+                    }
+                } else if (cell_type == EDG) {
+                    // EDGのセルに自分の色があってはならない
+                    if (board_cell == player_id) {
+                        return false;
+                    }
+                } else if (cell_type == CNR) {
+                    // CNRのセルに自分の色があるかチェック
+                    if (board_cell == player_id) {
+                        has_corner = true;
+                    }
+                }
+            }
+        }
+        
+        // CNRに少なくとも1つ自分の色が必要
+        return has_corner;
+    }
+
+    std::vector<Move> generate_legal_moves(int player_id, bool is_first_move) {
+        std::vector<Move> legal_moves;
+        Player& player = players[player_id];
+        
+        for (size_t mino_index = 0; mino_index < player.minos.size(); ++mino_index) {
+            Mino& mino = player.minos[mino_index];
+            if (!mino.usable) continue;
+            
+            for (int top = 0; top <= BOARD_SIZE + 1 - static_cast<int>(mino.h); ++top) {
+                for (int left = 0; left <= BOARD_SIZE + 1 - static_cast<int>(mino.w); ++left) {
+                    if (is_first_move) {
+                        if (puttable_first(mino, top, left, player_id)) {
+                            legal_moves.push_back({top, left, static_cast<int>(mino_index)});
+                        }
+                    } else {
+                        if (puttable(mino, top, left, player_id)) {
+                            legal_moves.push_back({top, left, static_cast<int>(mino_index)});
+                        }
+                    }
+                }
+            }
+        }
+        
+        return legal_moves;
+    }
+
+    void random_play(int start_player_id) {
+        // start_player_idからランダムにゲームを進行させる関数（未実装）
     }
 };
 
