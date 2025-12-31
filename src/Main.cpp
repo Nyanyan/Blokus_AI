@@ -25,6 +25,22 @@ void DrawMinoOnGrid(const Mino& mino, int pos, const Color& color, double gridX,
     }
 }
 
+// ミノの中心位置（FIL_IDXの重心）を計算する関数
+Point GetMinoCenter(const Mino& mino) {
+    int sumRow = 0, sumCol = 0, count = 0;
+    for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+        if (mino.mino[FIL_IDX][bit_pos]) {
+            int row = bit_pos / BOARD_WITH_WALL_SIZE;
+            int col = bit_pos % BOARD_WITH_WALL_SIZE;
+            sumRow += row;
+            sumCol += col;
+            count++;
+        }
+    }
+    if (count == 0) return Point(0, 0);
+    return Point(sumCol / count, sumRow / count);
+}
+
 // ミノを小さく描画する関数（残りミノ表示用）
 void DrawMinoSmall(const Mino& mino, const Vec2& pos, double cellSize, const Color& color) {
     // ミノの範囲を計算
@@ -53,6 +69,7 @@ void DrawMinoSmall(const Mino& mino, const Vec2& pos, double cellSize, const Col
 }
 
 void Main() {
+	Console.open();
     init_unique_minos();
     init_all_minos();
 
@@ -124,6 +141,18 @@ void Main() {
             turnText += U" (AI)";
         }
         font(turnText).draw(50, 50, PlayerColors[current_player]);
+        
+        // パスボタン（プレイヤー表示の右側）
+        if (!game_over && !is_ai[current_player] && !ai_thinking) {
+            if (SimpleGUI::Button(U"パス", Vec2(400, 45), 100)) {
+                Move pass_move = {-1, -1, MINO_IDX_PASS};
+                board.history[current_player].push_back(pass_move);
+                consecutive_passes++;
+                current_player = (current_player + 1) % N_PLAYERS;
+                selected_mino_index = -1;
+                selected_unique_mino_idx = -1;
+            }
+        }
 
         // グリッドの枠を描画
         RectF(gridX - 2, gridY - 2, BOARD_SIZE * cellSize + 4, BOARD_SIZE * cellSize + 4).drawFrame(2, 0, Color(50, 50, 50));
@@ -159,9 +188,18 @@ void Main() {
             int gridRow = static_cast<int>((mousePos.y - gridY) / cellSize);
             
             if (gridCol >= 0 && gridCol < BOARD_SIZE && gridRow >= 0 && gridRow < BOARD_SIZE) {
-                int bit_pos = (gridRow + 1) * BOARD_WITH_WALL_SIZE + (gridCol + 1);
-                
                 const Mino& mino = board.players[current_player].minos[selected_mino_index];
+                
+                // ミノの中心を取得してオフセットを計算
+                Point minoCenter = GetMinoCenter(mino);
+                int centerOffsetCol = minoCenter.x - 1;  // 壁分を引く
+                int centerOffsetRow = minoCenter.y - 1;
+                
+                // マウス位置がミノの中心になるように調整
+                int targetCol = gridCol - centerOffsetCol;
+                int targetRow = gridRow - centerOffsetRow;
+                int bit_pos = (targetRow + 1) * BOARD_WITH_WALL_SIZE + (targetCol + 1);
+                
                 bool can_place = false;
                 if (board.players[current_player].is_first_move) {
                     can_place = board.puttable_first(mino, bit_pos, current_player);
@@ -190,31 +228,55 @@ void Main() {
             int score = board.calculate_score(player_id);
             smallFont(U"スコア: {}"_fmt(score)).draw(infoX, infoY + 30, Color(50, 50, 50));
             
-            // 残りミノ数
-            int remaining_count = 0;
+            // 残りミノを描画
+            double minoX = infoX;
+            double minoY = infoY + 60;
+            
+            // usableなミノをファミリーごとにカウント
+            std::vector<int> unique_usable_minos;
             for (size_t i = 0; i < board.players[player_id].minos.size(); ++i) {
                 if (board.players[player_id].minos[i].usable) {
-                    bool is_unique = false;
-                    for (size_t j = 0; j < unique_minos.size(); ++j) {
-                        if (board.players[player_id].minos[i].families == unique_minos[j].families) {
-                            bool already_counted = false;
-                            for (int fam_idx : board.players[player_id].minos[i].families) {
-                                if (fam_idx < static_cast<int>(i)) {
-                                    already_counted = true;
-                                    break;
-                                }
-                            }
-                            if (!already_counted) {
-                                remaining_count++;
-                            }
-                            break;
+                    // このミノのファミリーの最小インデックスを取得
+                    int min_family_idx = board.players[player_id].minos[i].families[0];
+                    for (int fam_idx : board.players[player_id].minos[i].families) {
+                        if (fam_idx < min_family_idx) {
+                            min_family_idx = fam_idx;
                         }
+                    }
+                    // 最小インデックスの場合のみ追加（重複を避ける）
+                    if (static_cast<int>(i) == min_family_idx) {
+                        unique_usable_minos.push_back(i);
                     }
                 }
             }
-            smallFont(U"残りミノ: {}"_fmt(remaining_count)).draw(infoX, infoY + 55, Color(50, 50, 50));
             
-            infoY += 100;
+            // ミノを描画（11個で改行、クリック可能）
+            for (size_t idx = 0; idx < unique_usable_minos.size(); ++idx) {
+                int mino_idx = unique_usable_minos[idx];
+                double x = minoX + (idx % 11) * 28;
+                double y = minoY + (idx / 11) * 28;
+                
+                // クリック可能な領域
+                RectF minoArea(x - 2, y - 2, 26, 26);
+                bool is_hovered = minoArea.mouseOver();
+                bool is_current_player = (player_id == current_player && !is_ai[current_player] && !ai_thinking && !game_over);
+                
+                // ホバー時の背景
+                if (is_current_player && is_hovered) {
+                    minoArea.draw(ColorF(0.9, 0.9, 0.9, 0.5));
+                }
+                
+                DrawMinoSmall(board.players[player_id].minos[mino_idx], Vec2(x, y), 4.5, PlayerColors[player_id]);
+                
+                // クリックで選択（現在のプレイヤーのみ）
+                if (is_current_player && minoArea.leftClicked()) {
+                    selected_mino_index = mino_idx;
+                    selected_unique_mino_idx = static_cast<int>(idx);
+                    rotation = 0;
+                }
+            }
+            
+            infoY += 140;
         }
 
         // 左側に現在のプレイヤーの残りミノを表示
@@ -309,15 +371,6 @@ void Main() {
                 }
             }
             
-            // パスボタン
-            if (!is_ai[current_player] && SimpleGUI::Button(U"パス", Vec2(minoListX, minoListY + 400), 150)) {
-                Move pass_move = {-1, -1, MINO_IDX_PASS};
-                board.history[current_player].push_back(pass_move);
-                consecutive_passes++;
-                current_player = (current_player + 1) % N_PLAYERS;
-                selected_mino_index = -1;
-                selected_unique_mino_idx = -1;
-            }
         }
 
         // ゲーム終了時の表示
