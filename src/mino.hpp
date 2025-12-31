@@ -501,6 +501,73 @@ std::bitset<BOARD_WITH_WALL_SIZE> get_row_bits(const std::bitset<BOARD_BIT_SIZE>
     return row_bits;
 }
 
+// 指定した行にビット列を設定
+void set_row_bits(std::bitset<BOARD_BIT_SIZE>& bitset, int row, const std::bitset<BOARD_WITH_WALL_SIZE>& row_bits) {
+    int start_pos = row * BOARD_WITH_WALL_SIZE;
+    
+    for (int j = 0; j < BOARD_WITH_WALL_SIZE; ++j) {
+        bitset[start_pos + j] = row_bits[j];
+    }
+}
+
+// ミノを左上に詰める
+Mino normalize_position(const Mino& mino) {
+    Mino normalized = mino;
+    
+    // 全セルタイプを統合して最初の非空行を見つける
+    int first_row = -1;
+    for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
+        bool has_bit = false;
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            auto row_bits = get_row_bits(normalized.mino[cell_type], i);
+            if (!row_bits.none()) {
+                has_bit = true;
+                break;
+            }
+        }
+        if (has_bit) {
+            first_row = i;
+            break;
+        }
+    }
+    
+    // 行を上に詰める
+    if (first_row > 0) {
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            normalized.mino[cell_type] >>= (first_row * BOARD_WITH_WALL_SIZE);
+        }
+    }
+    
+    // 全セルタイプを統合して最初の非0列を見つける
+    int min_col = BOARD_WITH_WALL_SIZE;
+    for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            auto row_bits = get_row_bits(normalized.mino[cell_type], i);
+            if (!row_bits.none()) {
+                for (int j = 0; j < BOARD_WITH_WALL_SIZE; ++j) {
+                    if (row_bits[j]) {
+                        min_col = std::min(min_col, j);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // 列を左に詰める
+    if (min_col > 0 && min_col < BOARD_WITH_WALL_SIZE) {
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
+                auto row_bits = get_row_bits(normalized.mino[cell_type], i);
+                row_bits >>= min_col;
+                set_row_bits(normalized.mino[cell_type], i, row_bits);
+            }
+        }
+    }
+    
+    return normalized;
+}
+
 
 void print_mino(const Mino& mino) {
     for (int i = 0; i < BOARD_WITH_WALL_SIZE; ++i) {
@@ -547,7 +614,7 @@ Mino rotate90(const Mino& mino) {
         }
     }
     
-    return rotated;
+    return normalize_position(rotated);
 }
 
 // 左右反転
@@ -569,7 +636,7 @@ Mino flip_horizontal(const Mino& mino) {
         }
     }
     
-    return flipped;
+    return normalize_position(flipped);
 }
 
 // 2つのミノが同一かどうかを判定
