@@ -147,6 +147,29 @@ Move get_best_move_mcts(Board& board, int player_id) {
             node->total_value += score;
             node = node->parent;
         }
+        
+        // 50トライごとに上位3手を表示
+        if ((i + 1) % 50 == 0) {
+            std::vector<std::pair<Node*, double>> child_stats;
+            for (auto& child : root.children) {
+                double avg_value = child->visit_count > 0 ? child->total_value / child->visit_count : 0.0;
+                child_stats.push_back({child.get(), avg_value});
+            }
+            
+            // 訪問回数でソート
+            std::sort(child_stats.begin(), child_stats.end(), 
+                [](const auto& a, const auto& b) { return a.first->visit_count > b.first->visit_count; });
+            
+            std::cerr << "After " << (i + 1) << " simulations - Top 3 moves:\n";
+            for (int j = 0; j < std::min(3, static_cast<int>(child_stats.size())); ++j) {
+                Node* child = child_stats[j].first;
+                double avg_value = child_stats[j].second;
+                std::cerr << "  #" << (j + 1) << ": pos=" << child->move.pos 
+                          << " mino=" << child->move.mino_index 
+                          << " visits=" << child->visit_count 
+                          << " avg_value=" << avg_value << "\n";
+            }
+        }
     }
     
     // 最も訪問回数が多い子を選択
