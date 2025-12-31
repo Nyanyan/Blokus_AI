@@ -25,20 +25,21 @@ void DrawMinoOnGrid(const Mino& mino, int pos, const Color& color, double gridX,
     }
 }
 
-// ミノの中心位置（FIL_IDXの重心）を計算する関数
+// ミノの中心位置（FIL_IDXの範囲の中心）を計算する関数
 Point GetMinoCenter(const Mino& mino) {
-    int sumRow = 0, sumCol = 0, count = 0;
+    int minRow = BOARD_SIZE + 1, maxRow = 0, minCol = BOARD_SIZE + 1, maxCol = 0;
     for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
         if (mino.mino[FIL_IDX][bit_pos]) {
             int row = bit_pos / BOARD_WITH_WALL_SIZE;
             int col = bit_pos % BOARD_WITH_WALL_SIZE;
-            sumRow += row;
-            sumCol += col;
-            count++;
+            minRow = std::min(minRow, row);
+            maxRow = std::max(maxRow, row);
+            minCol = std::min(minCol, col);
+            maxCol = std::max(maxCol, col);
         }
     }
-    if (count == 0) return Point(0, 0);
-    return Point(sumCol / count, sumRow / count);
+    // 範囲の中心を返す（小数点以下切り捨て）
+    return Point((minCol + maxCol) / 2, (minRow + maxRow) / 2);
 }
 
 // ミノを小さく描画する関数（残りミノ表示用）
@@ -224,10 +225,10 @@ void Main() {
         for (int player_id = 0; player_id < N_PLAYERS; ++player_id) {
             // プレイヤー情報
             String playerText = U"プレイヤー {}"_fmt(player_id);
-            if (is_ai[player_id]) {
-                playerText += U" (AI)";
-            }
             font(playerText).draw(infoX, infoY, PlayerColors[player_id]);
+            
+            // AIチェックボックス
+            SimpleGUI::CheckBox(is_ai[player_id], U"AI", Vec2(infoX + 150, infoY), 80);
             
             // スコア
             int score = board.calculate_score(player_id);
@@ -303,10 +304,10 @@ void Main() {
                 }
                 
                 if (mino_idx >= 0) {
-                    double x = minoListX + (displayed_count % 4) * 70;
-                    double y = minoListY + (displayed_count / 4) * 70;
+                    double x = minoListX + (displayed_count % 3) * 160;
+                    double y = minoListY + (displayed_count / 3) * 160;
                     
-                    RectF minoBox(x, y, 60, 60);
+                    RectF minoBox(x, y, 150, 150);
                     bool is_hovered = minoBox.mouseOver();
                     bool is_selected = (selected_unique_mino_idx == static_cast<int>(unique_idx));
                     
@@ -319,7 +320,7 @@ void Main() {
                     }
                     minoBox.drawFrame(2, 0, is_selected ? PlayerColors[current_player] : Color(200, 200, 200));
                     
-                    DrawMinoSmall(board.players[current_player].minos[mino_idx], Vec2(x + 5, y + 5), 10, PlayerColors[current_player]);
+                    DrawMinoSmall(board.players[current_player].minos[mino_idx], Vec2(x + 10, y + 10), 25, PlayerColors[current_player]);
                     
                     if (!is_ai[current_player] && minoBox.leftClicked()) {
                         selected_mino_index = mino_idx;
