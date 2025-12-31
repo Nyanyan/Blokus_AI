@@ -1,73 +1,341 @@
 ﻿# include <Siv3D.hpp> // Siv3D v0.6.15
 #include "engine.hpp"
 
+// プレイヤーの色を定義
+const Color PlayerColors[N_PLAYERS] = {
+    Color(220, 50, 50),   // プレイヤー0: 赤
+    Color(250, 220, 50),  // プレイヤー1: 黄
+    Color(80, 200, 80),   // プレイヤー2: 緑
+    Color(50, 100, 220)   // プレイヤー3: 青
+};
+
+// ミノをグリッドに描画する関数
+void DrawMinoOnGrid(const Mino& mino, int pos, const Color& color, double gridX, double gridY, double cellSize, double alpha = 1.0) {
+    auto shifted_mino = mino << pos;
+    for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+        if (shifted_mino.mino[FIL_IDX][bit_pos]) {
+            int row = bit_pos / BOARD_WITH_WALL_SIZE;
+            int col = bit_pos % BOARD_WITH_WALL_SIZE;
+            if (row >= 1 && row <= BOARD_SIZE && col >= 1 && col <= BOARD_SIZE) {
+                RectF cell(gridX + (col - 1) * cellSize, gridY + (row - 1) * cellSize, cellSize, cellSize);
+                cell.draw(ColorF(color, alpha));
+                cell.drawFrame(1, 0, ColorF(0, 0, 0, alpha * 0.5));
+            }
+        }
+    }
+}
+
+// ミノを小さく描画する関数（残りミノ表示用）
+void DrawMinoSmall(const Mino& mino, const Vec2& pos, double cellSize, const Color& color) {
+    // ミノの範囲を計算
+    int minRow = BOARD_SIZE + 1, maxRow = 0, minCol = BOARD_SIZE + 1, maxCol = 0;
+    for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+        if (mino.mino[FIL_IDX][bit_pos]) {
+            int row = bit_pos / BOARD_WITH_WALL_SIZE;
+            int col = bit_pos % BOARD_WITH_WALL_SIZE;
+            minRow = std::min(minRow, row);
+            maxRow = std::max(maxRow, row);
+            minCol = std::min(minCol, col);
+            maxCol = std::max(maxCol, col);
+        }
+    }
+    
+    // ミノを描画
+    for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+        if (mino.mino[FIL_IDX][bit_pos]) {
+            int row = bit_pos / BOARD_WITH_WALL_SIZE;
+            int col = bit_pos % BOARD_WITH_WALL_SIZE;
+            RectF cell(pos.x + (col - minCol) * cellSize, pos.y + (row - minRow) * cellSize, cellSize, cellSize);
+            cell.draw(color);
+            cell.drawFrame(1, 0, ColorF(0, 0, 0, 0.5));
+        }
+    }
+}
+
 void Main() {
     init_unique_minos();
     init_all_minos();
 
-    int ai_player_id = 0;
-    int start_player_id = 0;
+    // ウィンドウサイズを設定
+    Window::Resize(1600, 900);
+    Scene::SetBackground(ColorF(0.95, 0.95, 0.95));
 
-    // 背景の色を設定する | Set the background color
-    Scene::SetBackground(Palette::White);
+    // フォント
+    Font font(24, Typeface::Bold);
+    Font smallFont(18);
+
+    // ゲーム状態
+    Board board;
+    int current_player = 0;
+    bool is_ai[N_PLAYERS] = { false, true, true, true }; // プレイヤー0は人間、他はAI
+    bool game_over = false;
+    int consecutive_passes = 0;
+
+    // UI状態
+    int selected_mino_index = -1;
+    int selected_unique_mino_idx = -1;
+    int rotation = 0;
+    
+    // グリッド設定
+    const double cellSize = 30.0;
+    const double gridX = 400 - (BOARD_SIZE * cellSize) / 2;
+    const double gridY = 450 - (BOARD_SIZE * cellSize) / 2;
+
+    // AI思考中フラグ
+    bool ai_thinking = false;
+    double ai_think_timer = 0.0;
+    Move ai_move = {-1, -1, 0.0, 0};
 
     while (System::Update()) {
-        // // テクスチャを描く | Draw the texture
-        // texture.draw(20, 20);
+        // ゲーム終了チェック
+        if (consecutive_passes >= N_PLAYERS && !game_over) {
+            game_over = true;
+        }
 
-        // // テキストを描く | Draw text
-        // font(U"Hello, Siv3D!🎮").draw(64, Vec2{ 20, 340 }, ColorF{ 0.2, 0.4, 0.8 });
+        // AIの手番処理
+        if (!game_over && is_ai[current_player] && !ai_thinking) {
+            ai_thinking = true;
+            ai_think_timer = 0.0;
+        }
 
-        // // 指定した範囲内にテキストを描く | Draw text within a specified area
-        // font(U"Siv3D (シブスリーディー) は、ゲームやアプリを楽しく簡単な C++ コードで開発できるフレームワークです。")
-        //     .draw(18, Rect{ 20, 430, 480, 200 }, Palette::Black);
+        if (ai_thinking) {
+            ai_think_timer += Scene::DeltaTime();
+            if (ai_think_timer > 0.5) { // 0.5秒待ってからAIが手を打つ
+                ai_move = get_best_move(board, current_player);
+                if (ai_move.mino_index == MINO_IDX_PASS) {
+                    board.history[current_player].push_back(ai_move);
+                    consecutive_passes++;
+                } else {
+                    board.put_mino(current_player, ai_move);
+                    consecutive_passes = 0;
+                }
+                current_player = (current_player + 1) % N_PLAYERS;
+                ai_thinking = false;
+            }
+        }
 
-        // // 長方形を描く | Draw a rectangle
-        // Rect{ 540, 20, 80, 80 }.draw();
+        // ======== 描画 ========
 
-        // // 角丸長方形を描く | Draw a rounded rectangle
-        // RoundRect{ 680, 20, 80, 200, 20 }.draw(ColorF{ 0.0, 0.4, 0.6 });
+        // 手番表示
+        String turnText = U"プレイヤー {} の手番"_fmt(current_player);
+        if (game_over) {
+            turnText = U"ゲーム終了";
+        } else if (is_ai[current_player]) {
+            turnText += U" (AI)";
+        }
+        font(turnText).draw(50, 50, PlayerColors[current_player]);
 
-        // // 円を描く | Draw a circle
-        // Circle{ 580, 180, 40 }.draw(Palette::Seagreen);
+        // グリッドの枠を描画
+        RectF(gridX - 2, gridY - 2, BOARD_SIZE * cellSize + 4, BOARD_SIZE * cellSize + 4).drawFrame(2, 0, Color(50, 50, 50));
 
-        // // 矢印を描く | Draw an arrow
-        // Line{ 540, 330, 760, 260 }.drawArrow(8, SizeF{ 20, 20 }, ColorF{ 0.4 });
+        // グリッドを描画
+        for (int i = 0; i < BOARD_SIZE; ++i) {
+            for (int j = 0; j < BOARD_SIZE; ++j) {
+                RectF cell(gridX + j * cellSize, gridY + i * cellSize, cellSize, cellSize);
+                cell.draw(ColorF(1, 1, 1));
+                cell.drawFrame(0.5, 0, ColorF(0.7, 0.7, 0.7));
+            }
+        }
 
-        // // 半透明の円を描く | Draw a semi-transparent circle
-        // Circle{ Cursor::Pos(), 40 }.draw(ColorF{ 1.0, 0.0, 0.0, 0.5 });
+        // 盤面の状態を描画
+        for (int player_id = 0; player_id < N_PLAYERS; ++player_id) {
+            for (int bit_pos = 0; bit_pos < BOARD_BIT_SIZE; ++bit_pos) {
+                if (board.cells[player_id][bit_pos]) {
+                    int row = bit_pos / BOARD_WITH_WALL_SIZE;
+                    int col = bit_pos % BOARD_WITH_WALL_SIZE;
+                    if (row >= 1 && row <= BOARD_SIZE && col >= 1 && col <= BOARD_SIZE) {
+                        RectF cell(gridX + (col - 1) * cellSize, gridY + (row - 1) * cellSize, cellSize, cellSize);
+                        cell.draw(PlayerColors[player_id]);
+                        cell.drawFrame(1, 0, ColorF(0, 0, 0, 0.5));
+                    }
+                }
+            }
+        }
 
-        // // ボタン | Button
-        // if (SimpleGUI::Button(U"count: {}"_fmt(count), Vec2{ 520, 370 }, 120, (checked == false)))
-        // {
-        //     // カウントを増やす | Increase the count
-        //     ++count;
-        // }
+        // マウスホバー時のミノプレビュー（人間プレイヤーの手番のみ）
+        if (!game_over && !is_ai[current_player] && selected_mino_index >= 0 && !ai_thinking) {
+            Vec2 mousePos = Cursor::Pos();
+            int gridCol = static_cast<int>((mousePos.x - gridX) / cellSize);
+            int gridRow = static_cast<int>((mousePos.y - gridY) / cellSize);
+            
+            if (gridCol >= 0 && gridCol < BOARD_SIZE && gridRow >= 0 && gridRow < BOARD_SIZE) {
+                int bit_pos = (gridRow + 1) * BOARD_WITH_WALL_SIZE + (gridCol + 1);
+                
+                const Mino& mino = board.players[current_player].minos[selected_mino_index];
+                bool can_place = false;
+                if (board.players[current_player].is_first_move) {
+                    can_place = board.puttable_first(mino, bit_pos, current_player);
+                } else {
+                    can_place = board.puttable(mino, bit_pos, current_player);
+                }
+                
+                Color previewColor = can_place ? PlayerColors[current_player] : Color(150, 150, 150);
+                DrawMinoOnGrid(mino, bit_pos, previewColor, gridX, gridY, cellSize, 0.5);
+            }
+        }
 
-        // // チェックボックス | Checkbox
-        // SimpleGUI::CheckBox(checked, U"Lock \U000F033E", Vec2{ 660, 370 }, 120);
+        // 右側に各プレイヤーの情報を表示
+        double infoX = gridX + BOARD_SIZE * cellSize + 50;
+        double infoY = 100;
+        
+        for (int player_id = 0; player_id < N_PLAYERS; ++player_id) {
+            // プレイヤー情報
+            String playerText = U"プレイヤー {}"_fmt(player_id);
+            if (is_ai[player_id]) {
+                playerText += U" (AI)";
+            }
+            font(playerText).draw(infoX, infoY, PlayerColors[player_id]);
+            
+            // スコア
+            int score = board.calculate_score(player_id);
+            smallFont(U"スコア: {}"_fmt(score)).draw(infoX, infoY + 30, Color(50, 50, 50));
+            
+            // 残りミノ数
+            int remaining_count = 0;
+            for (size_t i = 0; i < board.players[player_id].minos.size(); ++i) {
+                if (board.players[player_id].minos[i].usable) {
+                    bool is_unique = false;
+                    for (size_t j = 0; j < unique_minos.size(); ++j) {
+                        if (board.players[player_id].minos[i].families == unique_minos[j].families) {
+                            bool already_counted = false;
+                            for (int fam_idx : board.players[player_id].minos[i].families) {
+                                if (fam_idx < static_cast<int>(i)) {
+                                    already_counted = true;
+                                    break;
+                                }
+                            }
+                            if (!already_counted) {
+                                remaining_count++;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            smallFont(U"残りミノ: {}"_fmt(remaining_count)).draw(infoX, infoY + 55, Color(50, 50, 50));
+            
+            infoY += 100;
+        }
 
-        // // スライダー | Slider
-        // SimpleGUI::Slider(U"speed: {:.1f}"_fmt(speed), speed, 100, 400, Vec2{ 520, 420 }, 140, 120);
+        // 左側に現在のプレイヤーの残りミノを表示
+        if (!game_over && !ai_thinking) {
+            double minoListX = 50;
+            double minoListY = 150;
+            smallFont(U"残りのミノ (クリックで選択)").draw(minoListX, minoListY - 30, Color(50, 50, 50));
+            
+            int displayed_count = 0;
+            for (size_t unique_idx = 0; unique_idx < unique_minos.size(); ++unique_idx) {
+                // このunique_minoに対応する最初のusableなミノを探す
+                int mino_idx = -1;
+                for (size_t i = 0; i < board.players[current_player].minos.size(); ++i) {
+                    if (board.players[current_player].minos[i].usable && 
+                        board.players[current_player].minos[i].families == unique_minos[unique_idx].families) {
+                        mino_idx = static_cast<int>(i);
+                        break;
+                    }
+                }
+                
+                if (mino_idx >= 0) {
+                    double x = minoListX + (displayed_count % 4) * 70;
+                    double y = minoListY + (displayed_count / 4) * 70;
+                    
+                    RectF minoBox(x, y, 60, 60);
+                    bool is_hovered = minoBox.mouseOver();
+                    bool is_selected = (selected_unique_mino_idx == static_cast<int>(unique_idx));
+                    
+                    if (is_selected) {
+                        minoBox.draw(ColorF(PlayerColors[current_player], 0.3));
+                    } else if (is_hovered) {
+                        minoBox.draw(ColorF(0.9, 0.9, 0.9));
+                    } else {
+                        minoBox.draw(ColorF(1, 1, 1));
+                    }
+                    minoBox.drawFrame(2, 0, is_selected ? PlayerColors[current_player] : Color(200, 200, 200));
+                    
+                    DrawMinoSmall(board.players[current_player].minos[mino_idx], Vec2(x + 5, y + 5), 8, PlayerColors[current_player]);
+                    
+                    if (!is_ai[current_player] && minoBox.leftClicked()) {
+                        selected_mino_index = mino_idx;
+                        selected_unique_mino_idx = static_cast<int>(unique_idx);
+                        rotation = 0;
+                    }
+                    
+                    displayed_count++;
+                }
+            }
+            
+            // 右クリックで回転
+            if (!is_ai[current_player] && selected_mino_index >= 0 && MouseR.down()) {
+                // 次の回転を探す
+                int start_idx = selected_mino_index;
+                const auto& families = board.players[current_player].minos[selected_mino_index].families;
+                int next_idx = -1;
+                for (size_t i = 0; i < families.size(); ++i) {
+                    if (families[i] == selected_mino_index) {
+                        next_idx = families[(i + 1) % families.size()];
+                        break;
+                    }
+                }
+                if (next_idx >= 0) {
+                    selected_mino_index = next_idx;
+                }
+            }
+            
+            // マウス左クリックで配置
+            if (!is_ai[current_player] && selected_mino_index >= 0 && MouseL.down()) {
+                Vec2 mousePos = Cursor::Pos();
+                int gridCol = static_cast<int>((mousePos.x - gridX) / cellSize);
+                int gridRow = static_cast<int>((mousePos.y - gridY) / cellSize);
+                
+                if (gridCol >= 0 && gridCol < BOARD_SIZE && gridRow >= 0 && gridRow < BOARD_SIZE) {
+                    int bit_pos = (gridRow + 1) * BOARD_WITH_WALL_SIZE + (gridCol + 1);
+                    
+                    const Mino& mino = board.players[current_player].minos[selected_mino_index];
+                    bool can_place = false;
+                    if (board.players[current_player].is_first_move) {
+                        can_place = board.puttable_first(mino, bit_pos, current_player);
+                    } else {
+                        can_place = board.puttable(mino, bit_pos, current_player);
+                    }
+                    
+                    if (can_place) {
+                        Move move = {bit_pos, selected_mino_index, 0.0, 0};
+                        board.put_mino(current_player, move);
+                        consecutive_passes = 0;
+                        current_player = (current_player + 1) % N_PLAYERS;
+                        selected_mino_index = -1;
+                        selected_unique_mino_idx = -1;
+                    }
+                }
+            }
+            
+            // パスボタン
+            if (!is_ai[current_player] && SimpleGUI::Button(U"パス", Vec2(minoListX, minoListY + 400), 150)) {
+                Move pass_move = {-1, -1, MINO_IDX_PASS};
+                board.history[current_player].push_back(pass_move);
+                consecutive_passes++;
+                current_player = (current_player + 1) % N_PLAYERS;
+                selected_mino_index = -1;
+                selected_unique_mino_idx = -1;
+            }
+        }
 
-        // // 左キーが押されていたら | If left key is pressed
-        // if (KeyLeft.pressed())
-        // {
-        //     // プレイヤーが左に移動する | Player moves left
-        //     playerPosX = Max((playerPosX - speed * Scene::DeltaTime()), 60.0);
-        //     isPlayerFacingRight = false;
-        // }
-
-        // // 右キーが押されていたら | If right key is pressed
-        // if (KeyRight.pressed())
-        // {
-        //     // プレイヤーが右に移動する | Player moves right
-        //     playerPosX = Min((playerPosX + speed * Scene::DeltaTime()), 740.0);
-        //     isPlayerFacingRight = true;
-        // }
-
-        // // プレイヤーを描く | Draw the player
-        // emoji.scaled(0.75).mirrored(isPlayerFacingRight).drawAt(playerPosX, 540);
+        // ゲーム終了時の表示
+        if (game_over) {
+            // 最終スコアを計算して勝者を決定
+            int best_score = board.calculate_score(0);
+            int winner = 0;
+            for (int i = 1; i < N_PLAYERS; ++i) {
+                int score = board.calculate_score(i);
+                if (score > best_score) {
+                    best_score = score;
+                    winner = i;
+                }
+            }
+            
+            String winnerText = U"勝者: プレイヤー {} (スコア: {})"_fmt(winner, best_score);
+            font(winnerText).drawAt(800, 450, PlayerColors[winner]);
+        }
     }
 }
 
