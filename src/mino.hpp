@@ -11,6 +11,56 @@ constexpr int FIL_IDX = 0; // filled
 constexpr int CNR_IDX = 1; // corner
 constexpr int EDG_IDX = 2; // edge
 
+const std::bitset<BOARD_BIT_SIZE> BOARD_MASK(
+    "0000000000000000000000"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0111111111111111111110"
+    "0000000000000000000000"
+);
+
+const std::bitset<BOARD_BIT_SIZE> WALL_MASK(
+    "1111111111111111111111"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1000000000000000000001"
+    "1111111111111111111111"
+);
+
 struct Mino {
     std::bitset<BOARD_BIT_SIZE> mino[N_MINO_CELL_TYPE];
     int size;
@@ -27,6 +77,48 @@ struct Mino {
 
     void compute_size() {
         size = mino[FIL_IDX].count();
+    }
+
+    // 左シフト演算子（列を左に移動）
+    Mino operator<<(int shift) const {
+        Mino result;
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            result.mino[cell_type] = mino[cell_type] << shift;
+        }
+        result.size = size;
+        result.families = families;
+        result.usable = usable;
+        return result;
+    }
+
+    // 右シフト演算子（列を右に移動）
+    Mino operator>>(int shift) const {
+        Mino result;
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            result.mino[cell_type] = mino[cell_type] >> shift;
+        }
+        result.size = size;
+        result.families = families;
+        result.usable = usable;
+        return result;
+    }
+
+    bool shiftable_left(int shift) const {
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            if (((mino[cell_type] << shift) & BOARD_MASK).count() != mino[cell_type].count()) {
+                return false;
+            } 
+        }
+        return true;
+    }
+
+    bool shiftable_right(int shift) const {
+        for (int cell_type = 0; cell_type < N_MINO_CELL_TYPE; ++cell_type) {
+            if (((mino[cell_type] >> shift) & BOARD_MASK).count() != mino[cell_type].count()) {
+                return false;
+            } 
+        }
+        return true;
     }
 };
 

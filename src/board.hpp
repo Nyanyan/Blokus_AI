@@ -20,8 +20,7 @@ struct Player {
 constexpr int MINO_IDX_PASS = -1;
 
 struct Move {
-    int top;
-    int left;
+    int place; // 左シフト数
     int mino_index;
     double mcts_score;
     int n_tried;
@@ -32,25 +31,25 @@ constexpr int N_PLAYERS = 4;
 constexpr double WIN_SCORE_BONUS = 10000.0;
 
 struct Board {
-    int cells[BOARD_SIZE + 2][BOARD_SIZE + 2];
+    std::bitset<BOARD_BIT_SIZE> cells[N_PLAYERS];
+    std::bitset<BOARD_BIT_SIZE> silhouette; // すべてのプレイヤーの石が置かれている部分のビット集合
     Player players[N_PLAYERS];
     std::vector<std::vector<Move>> history;
     
     Board() {
-        for (int i = 0; i < BOARD_SIZE + 2; ++i) {
-            for (int j = 0; j < BOARD_SIZE + 2; ++j) {
-                cells[i][j] = CELL_EMPTY;
-            }
+        for (int i = 0; i < N_PLAYERS; ++i) {
+            cells[i].reset();
         }
+        history.clear();
         history.resize(N_PLAYERS);
         for (int i = 0; i < N_PLAYERS; ++i) {
             players[i] = Player();
         }
     }
 
-    bool puttable_first(Mino mino, int top, int left, int player_id) {
-        // 最初のミノを (top, left) に置けるか判定する関数
-        // minoのCNRが盤面の隅に来ること、minoのFILがすべてCELL_EMPTYであることが条件。
+    bool puttable_first(Mino mino, int pos, int player_id) {
+        // 最初のミノを pos に置けるか判定する関数
+        // minoのCNRが盤面の隅に来ること、minoのFILがすべて空であることが条件。
 
         // 各プレイヤーの開始位置（四隅）
         int corner_positions[4][2] = {
@@ -59,85 +58,42 @@ struct Board {
             {BOARD_SIZE + 1, BOARD_SIZE + 1},  // プレイヤー2: 右下
             {BOARD_SIZE + 1, 0}        // プレイヤー3: 左下
         };
-        
-        int corner_i = corner_positions[player_id][0];
-        int corner_j = corner_positions[player_id][1];
-        
-        bool touches_corner = false;
-        
-        for (size_t i = 0; i < mino.h; ++i) {
-            for (size_t j = 0; j < mino.w; ++j) {
-                int board_i = top + i;
-                int board_j = left + j;
-                
-                // ボードの範囲外チェック
-                if (board_i < 0 || board_i >= BOARD_SIZE + 2 || 
-                    board_j < 0 || board_j >= BOARD_SIZE + 2) {
-                    return false;
-                }
-                
-                int cell_type = mino.mino[i][j];
-                int board_cell = cells[board_i][board_j];
-                
-                if (cell_type == FIL) {
-                    // FILのセルは空でなければならない
-                    if (board_cell != CELL_EMPTY) {
-                        return false;
-                    }
-                } else if (cell_type == CNR) {
-                    // CNRのセルが盤面の隅と一致するかチェック
-                    if (board_i == corner_i && board_j == corner_j) {
-                        touches_corner = true;
-                    }
-                }
-            }
+
+        std::bitset<BOARD_BIT_SIZE> corner;
+        int corner_idx = corner_positions[player_id][0] * BOARD_WITH_WALL_SIZE + corner_positions[player_id][1];
+        corner.set(corner_idx);
+
+        if (!mino.shiftable_left(pos)) { // シフトできない
+            return false;
         }
-        
-        // 盤面の隅に接している必要がある
-        return touches_corner;
+        Mino mino_cpy = mino << pos;
+        if ((mino_cpy.mino[FIL_IDX] & silhouette).any()) { // 既存の石と被っている
+            return false;
+        }
+        if ((mino_cpy.mino[FIL_IDX] & corner).none()) { // 盤の角に自分のミノがない
+            return false;
+        }
+        return true;
     }
 
-    bool puttable(Mino mino, int top, int left, int player_id) {
-        // ミノを (top, left) に置けるか判定する関数
+    bool puttable(Mino mino, int pos, int player_id) {
+        // ミノを pos に置けるか判定する関数
         // minoのCNRに1つ以上自分の色があること、minoのすべてのEDGに自分の色がないこと、minoのFILがすべてCELL_EMPTYであることが条件。
         
-        bool has_corner = false;
-        
-        for (size_t i = 0; i < mino.h; ++i) {
-            for (size_t j = 0; j < mino.w; ++j) {
-                int board_i = top + i;
-                int board_j = left + j;
-                
-                // ボードの範囲外チェック
-                if (board_i < 0 || board_i >= BOARD_SIZE + 2 || 
-                    board_j < 0 || board_j >= BOARD_SIZE + 2) {
-                    return false;
-                }
-                
-                int cell_type = mino.mino[i][j];
-                int board_cell = cells[board_i][board_j];
-                
-                if (cell_type == FIL) {
-                    // FILのセルは空でなければならない
-                    if (board_cell != CELL_EMPTY) {
-                        return false;
-                    }
-                } else if (cell_type == EDG) {
-                    // EDGのセルに自分の色があってはならない
-                    if (board_cell == player_id) {
-                        return false;
-                    }
-                } else if (cell_type == CNR) {
-                    // CNRのセルに自分の色があるかチェック
-                    if (board_cell == player_id) {
-                        has_corner = true;
-                    }
-                }
-            }
+        if (!mino.shiftable_left(pos)) { // シフトできない
+            return false;
         }
-        
-        // CNRに少なくとも1つ自分の色が必要
-        return has_corner;
+        Mino mino_cpy = mino << pos;
+        if ((mino_cpy.mino[FIL_IDX] & silhouette).any()) { // 既存の石と被っている
+            return false;
+        }
+        if ((mino_cpy.mino[CNR_IDX] & cells[player_id]).none()) { // 角が自分の石と接していない
+            return false;
+        }
+        if ((mino_cpy.mino[EDG_IDX] & cells[player_id]).any()) { // 辺が自分の石と接している
+            return false;
+        }
+        return true;
     }
 
     std::vector<Move> generate_legal_moves(int player_id, bool is_first_move) {
@@ -148,16 +104,14 @@ struct Board {
             Mino& mino = player.minos[mino_index];
             if (!mino.usable) continue;
             
-            for (int top = 0; top <= BOARD_SIZE + 2 - static_cast<int>(mino.h); ++top) {
-                for (int left = 0; left <= BOARD_SIZE + 2 - static_cast<int>(mino.w); ++left) {
-                    if (is_first_move) {
-                        if (puttable_first(mino, top, left, player_id)) {
-                            legal_moves.push_back({top, left, static_cast<int>(mino_index)});
-                        }
-                    } else {
-                        if (puttable(mino, top, left, player_id)) {
-                            legal_moves.push_back({top, left, static_cast<int>(mino_index)});
-                        }
+            for (int pos = 0; pos <= BOARD_SIZE + 2 - mino.size; ++pos) {
+                if (is_first_move) {
+                    if (puttable_first(mino, pos, player_id)) {
+                        legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
+                    }
+                } else {
+                    if (puttable(mino, pos, player_id)) {
+                        legal_moves.push_back({pos, static_cast<int>(mino_index), 0.0, 0});
                     }
                 }
             }
@@ -171,14 +125,10 @@ struct Board {
         Mino& mino = player.minos[move.mino_index];
         
         // ミノを盤面に配置
-        for (size_t i = 0; i < mino.h; ++i) {
-            for (size_t j = 0; j < mino.w; ++j) {
-                if (mino.mino[i][j] == FIL) {
-                    cells[move.top + i][move.left + j] = player_id;
-                }
-            }
-        }
-        
+        std::bitset<BOARD_BIT_SIZE> put_mino = mino.mino[FIL_IDX] << move.place;
+        cells[player_id] |= put_mino;
+        silhouette |= put_mino;
+
         // 使用したミノとそのfamilyの全てを使用不可にする
         for (int family_idx : mino.families) {
             player.minos[family_idx].usable = false;
@@ -202,10 +152,20 @@ struct Board {
         for (int i = 1; i < BOARD_SIZE + 1; ++i) {
             std::cerr << "|";
             for (int j = 1; j < BOARD_SIZE + 1; ++j) {
-                if (cells[i][j] == CELL_EMPTY) {
+                int pos = i * BOARD_WITH_WALL_SIZE + j;
+                int player_at_pos = -1;
+                
+                for (int p = 0; p < N_PLAYERS; ++p) {
+                    if (cells[p][pos]) {
+                        player_at_pos = p;
+                        break;
+                    }
+                }
+                
+                if (player_at_pos == -1) {
                     std::cout << " ";
                 } else {
-                    std::cout << static_cast<int>(cells[i][j]);
+                    std::cout << player_at_pos;
                 }
             }
             std::cerr << "|";
