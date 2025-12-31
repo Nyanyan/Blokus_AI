@@ -221,32 +221,41 @@ struct Board {
         }
     }
 
-    void random_play(int start_player_id) {
-        // start_player_idからランダムにゲームを進行させる関数
+    Move get_random_move(int player_id) {
+        Player& player = players[player_id];
+        std::vector<Move> legal_moves = generate_legal_moves(player_id, player.is_first_move);
+        
+        if (legal_moves.empty()) {
+            return {-1, -1, MINO_IDX_PASS}; // パス
+        }
+        
         std::random_device rd;
         std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, legal_moves.size() - 1);
+        int move_idx = dis(gen);
         
+        return legal_moves[move_idx];
+    }
+
+    void random_playout(int start_player_id) {
+        // start_player_idからランダムにゲームを進行させる関数
         int current_player = start_player_id;
         int consecutive_passes = 0;
         while (consecutive_passes < N_PLAYERS) {
-            Player& player = players[current_player];
-            
-            // 合法手を生成
-            std::vector<Move> legal_moves = generate_legal_moves(current_player, player.is_first_move);
-
             print_board();
             
-            if (legal_moves.empty()) {
+            // ランダムな手を取得
+            Move move = get_random_move(current_player);
+            
+            if (move.mino_index == MINO_IDX_PASS) {
                 // パス
-                history[current_player].push_back({-1, -1, MINO_IDX_PASS});
+                history[current_player].push_back(move);
                 std::cerr << "Player " << current_player << " passes.\n";
                 consecutive_passes++;
             } else {
-                // ランダムに1手選んで実行
-                std::uniform_int_distribution<> dis(0, legal_moves.size() - 1);
-                int move_idx = dis(gen);
-                print_move(current_player, legal_moves[move_idx]);
-                put_mino(current_player, legal_moves[move_idx]);
+                // 手を実行
+                std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at (" << move.top << ", " << move.left << ")\n";
+                put_mino(current_player, move);
                 consecutive_passes = 0;
             }
 
