@@ -39,7 +39,7 @@ Move get_best_move(Board& board, int player_id) {
             move.n_tried++;
         }
         move.mcts_score /= static_cast<double>(move.n_tried);
-        std::cerr << "Move at (" << move.top << ", " << move.left << ") with mino " << move.mino_index << " has MC score: " << move.mcts_score << " after " << move.n_tried << " trials. elapsed " << (tim() - strt) << " ms (" << (tim() - strt) / move.n_tried << " ms/it)\n";
+        std::cerr << "Move at pos " << move.pos << " with mino " << move.mino_index << " has MC score: " << move.mcts_score << " after " << move.n_tried << " trials. elapsed " << (tim() - strt) << " ms (" << (tim() - strt) / move.n_tried << " ms/it)\n";
     }
     // 最もスコアの高い手を選択
     Move* best_move = &legal_moves[0];
@@ -48,7 +48,7 @@ Move get_best_move(Board& board, int player_id) {
             best_move = &move;
         }
     }
-    std::cerr << "Best move chosen at (" << best_move->top << ", " << best_move->left << ") with mino " << best_move->mino_index << " having MC score: " << best_move->mcts_score << "\n";
+    std::cerr << "Best move chosen at pos " << best_move->pos << " with mino " << best_move->mino_index << " having MC score: " << best_move->mcts_score << "\n";
     return *best_move;
 }
 
@@ -86,7 +86,7 @@ int main() {
             consecutive_passes++;
         } else {
             // 手を実行
-            std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at (" << move.top << ", " << move.left << ")\n";
+            std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at pos " << move.pos << "\n";
             board.put_mino(current_player, move);
             consecutive_passes = 0;
         }

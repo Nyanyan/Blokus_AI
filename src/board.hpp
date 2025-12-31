@@ -133,7 +133,7 @@ struct Board {
                 }
             }
         }
-        std::cerr << legal_moves.size() << " legal moves generated for Player " << player_id << (is_first_move ? " (first move)" : "") << ".\n";
+        // std::cerr << legal_moves.size() << " legal moves generated for Player " << player_id << (is_first_move ? " (first move)" : "") << ".\n";
         return legal_moves;
     }
 
@@ -264,7 +264,7 @@ struct Board {
         int current_player = start_player_id;
         int consecutive_passes = 0;
         while (consecutive_passes < N_PLAYERS) {
-            print_board();
+            // print_board();
             
             // ランダムな手を取得
             Move move = get_random_move(current_player);
@@ -272,21 +272,21 @@ struct Board {
             if (move.mino_index == MINO_IDX_PASS) {
                 // パス
                 history[current_player].push_back(move);
-                std::cerr << "Player " << current_player << " passes.\n";
+                // std::cerr << "Player " << current_player << " passes.\n";
                 consecutive_passes++;
             } else {
                 // 手を実行
-                std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at " << move.pos << "\n";
+                // std::cerr << "Player " << current_player << " places mino " << move.mino_index << " at " << move.pos << "\n";
                 put_mino(current_player, move);
                 consecutive_passes = 0;
             }
 
-            std::cerr << "\n";
+            // std::cerr << "\n";
             
             // 次のプレイヤーへ
             current_player = (current_player + 1) % N_PLAYERS;
         }
 
-        print_scores();
+        // print_scores();
     }
 };
