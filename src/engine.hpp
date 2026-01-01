@@ -7,7 +7,16 @@ inline uint64_t tim() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 }
 
-
+// 盤面の比較用ヘルパー関数
+inline bool boards_equal(const Board& a, const Board& b) {
+    // 各プレイヤーの石の配置を比較
+    for (int i = 0; i < N_PLAYERS; ++i) {
+        if (a.cells[i] != b.cells[i]) {
+            return false;
+        }
+    }
+    return true;
+}
 
 struct Node {
     Board board;
@@ -93,6 +102,9 @@ Move get_best_move_mc(Board& board, int player_id) {
     return *best_move;
 }
 
+// グローバルなMCTS探索木のルート
+std::unique_ptr<Node> global_mcts_root = nullptr;
+
 Move get_best_move_mcts(Board& board, int player_id) {
     const int simulation_count = 500; // シミュレーション回数
     const double exploration_param = 1.41; // UCB1の探索パラメータ
@@ -100,13 +112,29 @@ Move get_best_move_mcts(Board& board, int player_id) {
     std::cerr << "Starting MCTS for Player " << player_id << " with " << simulation_count << " simulations...\n";
     uint64_t start_time = tim();
     
-    // ルートノードを作成
-    Node root(board, player_id, player_id);
+    // グローバルツリーから現在の盤面に対応するノードを探す
+    std::unique_ptr<Node> root_ptr = nullptr;
+    Node* root = nullptr;
+    
+    if (global_mcts_root != nullptr && boards_equal(global_mcts_root->board, board) && 
+        global_mcts_root->current_player_id == player_id) {
+        // 前回の探索結果を再利用
+        std::cerr << "Reusing previous MCTS tree (visits: " << global_mcts_root->visit_count << ")\n";
+        root_ptr = std::move(global_mcts_root);
+        root = root_ptr.get();
+        root->parent = nullptr; // 親ポインタをクリア
+        root->target_player_id = player_id; // ターゲットプレイヤーを更新
+    } else {
+        // 新しいルートノードを作成
+        std::cerr << "Creating new MCTS tree\n";
+        root_ptr = std::make_unique<Node>(board, player_id, player_id);
+        root = root_ptr.get();
+    }
     
     // MCTSのメインループ
     for (int i = 0; i < simulation_count; ++i) {
         // 1. Selection: UCB1で葉ノードまで選択
-        Node* node = &root;
+        Node* node = root;
         while (!node->is_terminal() && node->untried_moves.empty() && !node->children.empty()) {
             // 最もUCB1値が高い子を選択
             Node* best_child = nullptr;
@@ -151,7 +179,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
         // 50トライごとに上位3手を表示
         if ((i + 1) % 50 == 0) {
             std::vector<std::pair<Node*, double>> child_stats;
-            for (auto& child : root.children) {
+            for (auto& child : root->children) {
                 double avg_value = child->visit_count > 0 ? child->total_value / child->visit_count : 0.0;
                 child_stats.push_back({child.get(), avg_value});
             }
@@ -175,7 +203,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
     // 最も訪問回数が多い子を選択
     Node* best_child = nullptr;
     int max_visits = -1;
-    for (auto& child : root.children) {
+    for (auto& child : root->children) {
         if (child->visit_count > max_visits) {
             max_visits = child->visit_count;
             best_child = child.get();
@@ -186,6 +214,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
     
     if (best_child == nullptr) {
         std::cerr << "No valid moves found. Passing. Elapsed " << elapsed << " ms\n";
+        global_mcts_root = nullptr; // ツリーをクリア
         return {-1, -1, MINO_IDX_PASS};
     }
     
@@ -194,7 +223,27 @@ Move get_best_move_mcts(Board& board, int player_id) {
               << " (visits: " << best_child->visit_count << ", avg_value: " << avg_value << ") "
               << "Elapsed " << elapsed << " ms (" << (elapsed * 1000 / simulation_count) << " us/simulation)\n";
     
-    return best_child->move;
+    Move result_move = best_child->move;
+    
+    // 選択した手の子ノードを次回の探索のために保存
+    // best_childをrootのchildrenから取り出す
+    std::unique_ptr<Node> next_root = nullptr;
+    for (auto& child : root->children) {
+        if (child.get() == best_child) {
+            next_root = std::move(child);
+            break;
+        }
+    }
+    
+    if (next_root) {
+        next_root->parent = nullptr; // 親ポインタをクリア
+        global_mcts_root = std::move(next_root);
+        std::cerr << "Saved MCTS tree for next turn (visits: " << global_mcts_root->visit_count << ")\n";
+    } else {
+        global_mcts_root = nullptr;
+    }
+    
+    return result_move;
 }
 
 Move get_best_move(Board& board, int player_id) {
