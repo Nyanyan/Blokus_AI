@@ -81,6 +81,176 @@ void DrawMinoSmall(int mino_index, const Vec2& pos, double cellSize, const Color
     }
 }
 
+// 盤面をテキスト形式に変換する関数
+String BoardToText(const Board& board, int current_player) {
+    String result;
+    
+    // 盤面の状態を出力
+    result += U"# Board State\n";
+    for (int i = 0; i < BOARD_SIZE; ++i) {
+        for (int j = 0; j < BOARD_SIZE; ++j) {
+            int bit_pos = (i + 1) * BOARD_WITH_WALL_SIZE + (j + 1);
+            int player_at_pos = -1;
+            for (int p = 0; p < N_PLAYERS; ++p) {
+                if (board.cells[p][bit_pos]) {
+                    player_at_pos = p;
+                    break;
+                }
+            }
+            if (player_at_pos == -1) {
+                result += U".";
+            } else {
+                result += Format(player_at_pos);
+            }
+        }
+        result += U"\n";
+    }
+    
+    // 現在の手番
+    result += U"# Current Player\n";
+    result += Format(current_player) + U"\n";
+    
+    // 各プレイヤーの残りミノ
+    result += U"# Remaining Minos\n";
+    for (int p = 0; p < N_PLAYERS; ++p) {
+        result += Format(U"Player{}: ", p);
+        std::vector<int> usable_minos;
+        for (size_t i = 0; i < board.players[p].minos.size(); ++i) {
+            if (board.players[p].minos[i].usable) {
+                int min_family_idx = board.players[p].minos[i].families[0];
+                for (int fam_idx : board.players[p].minos[i].families) {
+                    if (fam_idx < min_family_idx) {
+                        min_family_idx = fam_idx;
+                    }
+                }
+                if (static_cast<int>(i) == min_family_idx) {
+                    usable_minos.push_back(i);
+                }
+            }
+        }
+        for (size_t i = 0; i < usable_minos.size(); ++i) {
+            if (i > 0) result += U",";
+            result += Format(usable_minos[i]);
+        }
+        result += U"\n";
+    }
+    
+    return result;
+}
+
+// テキストから盤面を復元する関数
+bool TextToBoard(const String& text, Board& board, int& current_player) {
+    try {
+        auto lines = text.split(U'\n');
+        size_t line_idx = 0;
+        
+        // 新しいボードを作成
+        Board new_board;
+        
+        // Board State セクションを探す
+        while (line_idx < lines.size() && !lines[line_idx].starts_with(U"# Board State")) {
+            line_idx++;
+        }
+        if (line_idx >= lines.size()) return false;
+        line_idx++;
+        
+        // 盤面を読み込む
+        for (int i = 0; i < BOARD_SIZE && line_idx < lines.size(); ++i, ++line_idx) {
+            const String& line = lines[line_idx];
+            if (line.size() < BOARD_SIZE) continue;
+            
+            for (int j = 0; j < BOARD_SIZE; ++j) {
+                if (line[j] >= U'0' && line[j] <= U'3') {
+                    int player_id = line[j] - U'0';
+                    int bit_pos = (i + 1) * BOARD_WITH_WALL_SIZE + (j + 1);
+                    new_board.cells[player_id].set(bit_pos);
+                    new_board.silhouette.set(bit_pos);
+                }
+            }
+        }
+        
+        // Current Player セクションを探す
+        while (line_idx < lines.size() && !lines[line_idx].starts_with(U"# Current Player")) {
+            line_idx++;
+        }
+        if (line_idx >= lines.size()) return false;
+        line_idx++;
+        
+        if (line_idx < lines.size()) {
+            current_player = ParseInt<int>(lines[line_idx]);
+        }
+        line_idx++;
+        
+        // Remaining Minos セクションを探す
+        while (line_idx < lines.size() && !lines[line_idx].starts_with(U"# Remaining Minos")) {
+            line_idx++;
+        }
+        if (line_idx >= lines.size()) return false;
+        line_idx++;
+        
+        // 各プレイヤーの残りミノを読み込む
+        for (int p = 0; p < N_PLAYERS && line_idx < lines.size(); ++p, ++line_idx) {
+            const String& line = lines[line_idx];
+            auto parts = line.split(U':');
+            if (parts.size() < 2) continue;
+            
+            String trimmed_part = parts[1];
+            trimmed_part.trim();
+            auto mino_strs = trimmed_part.split(U',');
+            std::set<int> usable_mino_indices;
+            for (const auto& mino_str_ref : mino_strs) {
+                String mino_str = mino_str_ref;
+                mino_str.trim();
+                if (!mino_str.isEmpty()) {
+                    int mino_idx = ParseInt<int>(mino_str);
+                    usable_mino_indices.insert(mino_idx);
+                }
+            }
+            
+            // 全てのミノをusable=falseにしてから、指定されたものだけtrueに
+            for (size_t i = 0; i < new_board.players[p].minos.size(); ++i) {
+                new_board.players[p].minos[i].usable = false;
+            }
+            
+            for (int idx : usable_mino_indices) {
+                if (idx >= 0 && idx < static_cast<int>(new_board.players[p].minos.size())) {
+                    // このミノのfamily全体をusable=trueに
+                    for (int fam_idx : new_board.players[p].minos[idx].families) {
+                        new_board.players[p].minos[fam_idx].usable = true;
+                    }
+                }
+            }
+            
+            // remaining_mino_sizeを再計算
+            new_board.players[p].remaining_mino_size = 0;
+            std::set<int> counted_families;
+            for (size_t i = 0; i < new_board.players[p].minos.size(); ++i) {
+                if (new_board.players[p].minos[i].usable) {
+                    int min_family_idx = new_board.players[p].minos[i].families[0];
+                    for (int fam_idx : new_board.players[p].minos[i].families) {
+                        if (fam_idx < min_family_idx) {
+                            min_family_idx = fam_idx;
+                        }
+                    }
+                    if (counted_families.find(min_family_idx) == counted_families.end()) {
+                        counted_families.insert(min_family_idx);
+                        new_board.players[p].remaining_mino_size += new_board.players[p].minos[i].size;
+                    }
+                }
+            }
+            
+            // is_first_moveの判定（盤面に石がない場合はtrue）
+            new_board.players[p].is_first_move = (new_board.cells[p].none());
+        }
+        
+        board = new_board;
+        return true;
+        
+    } catch (...) {
+        return false;
+    }
+}
+
 void Main() {
 	Console.open();
     init_unique_minos();
@@ -117,6 +287,10 @@ void Main() {
     bool ai_thinking = false;
     double ai_think_timer = 0.0;
     Move ai_move = {-1, -1, 0.0, 0};
+    
+    // 盤面入出力用のUI状態
+    TextAreaEditState textAreaState;
+    bool show_io_panel = false;
 
     while (System::Update()) {
         // ゲーム終了チェック
@@ -167,6 +341,11 @@ void Main() {
                 selected_mino_index = -1;
                 selected_unique_mino_idx = -1;
             }
+        }
+        
+        // 盤面入出力ボタン
+        if (SimpleGUI::Button(U"盤面I/O", Vec2(520, 45), 100)) {
+            show_io_panel = !show_io_panel;
         }
 
         // グリッドの枠を描画
@@ -390,6 +569,44 @@ void Main() {
                     selected_mino_index = -1;
                     selected_unique_mino_idx = -1;
                 }
+            }
+        }
+        
+        // 盤面入出力パネル
+        if (show_io_panel) {
+            RectF panel(50, 100, 700, 650);
+            panel.draw(ColorF(0.98, 0.98, 0.98));
+            panel.drawFrame(2, 0, Color(100, 100, 100));
+            
+            smallFont(U"盤面の入出力").draw(60, 110, Color(50, 50, 50));
+            
+            // 出力ボタン
+            if (SimpleGUI::Button(U"盤面をコピー", Vec2(60, 140), 150)) {
+                String text = BoardToText(board, current_player);
+                Clipboard::SetText(text);
+            }
+            
+            // テキストエリア
+            SimpleGUI::TextArea(textAreaState, Vec2(60, 180), SizeF(680, 500));
+            
+            // 入力ボタン
+            if (SimpleGUI::Button(U"盤面を復元", Vec2(60, 690), 150)) {
+                if (TextToBoard(textAreaState.text, board, current_player)) {
+                    // 復元成功
+                    consecutive_passes = 0;
+                    game_over = false;
+                    ai_thinking = false;
+                    selected_mino_index = -1;
+                    selected_unique_mino_idx = -1;
+                } else {
+                    // 復元失敗
+                    Print << U"盤面の復元に失敗しました";
+                }
+            }
+            
+            // 閉じるボタン
+            if (SimpleGUI::Button(U"閉じる", Vec2(220, 690), 100)) {
+                show_io_panel = false;
             }
         }
 
