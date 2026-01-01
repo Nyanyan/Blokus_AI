@@ -1,5 +1,8 @@
 ﻿# include <Siv3D.hpp> // Siv3D v0.6.15
 #include "engine.hpp"
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 // プレイヤーの色を定義
 const Color PlayerColors[N_PLAYERS] = {
@@ -284,9 +287,11 @@ void Main() {
     const double gridY = 450 - (BOARD_SIZE * cellSize) / 2;
 
     // AI思考中フラグ
-    bool ai_thinking = false;
-    double ai_think_timer = 0.0;
+    std::atomic<bool> ai_thinking(false);
+    std::atomic<bool> ai_move_ready(false);
+    std::mutex ai_mutex;
     Move ai_move = {-1, -1, 0.0, 0};
+    std::thread ai_thread;
     
     // 盤面入出力用のUI状態
     TextAreaEditState textAreaState;
@@ -299,25 +304,41 @@ void Main() {
         }
 
         // AIの手番処理
-        if (!game_over && is_ai[current_player] && !ai_thinking) {
-            ai_thinking = true;
-            ai_think_timer = 0.0;
+        if (!game_over && is_ai[current_player] && !ai_thinking.load()) {
+            // AIの思考を別スレッドで開始
+            ai_thinking.store(true);
+            ai_move_ready.store(false);
+            
+            // 前のスレッドが残っていたらjoin
+            if (ai_thread.joinable()) {
+                ai_thread.join();
+            }
+            
+            // 盤面のコピーを作成して別スレッドで実行
+            Board board_copy = board;
+            int player_copy = current_player;
+            
+            ai_thread = std::thread([&, board_copy, player_copy]() mutable {
+                Move move = get_best_move(board_copy, player_copy);
+                std::lock_guard<std::mutex> lock(ai_mutex);
+                ai_move = move;
+                ai_move_ready.store(true);
+                ai_thinking.store(false);
+            });
         }
 
-        if (ai_thinking) {
-            ai_think_timer += Scene::DeltaTime();
-            if (ai_think_timer > 0.5) { // 0.5秒待ってからAIが手を打つ
-                ai_move = get_best_move(board, current_player);
-                if (ai_move.mino_index == MINO_IDX_PASS) {
-                    board.history[current_player].push_back(ai_move);
-                    consecutive_passes++;
-                } else {
-                    board.put_mino(current_player, ai_move);
-                    consecutive_passes = 0;
-                }
-                current_player = (current_player + 1) % N_PLAYERS;
-                ai_thinking = false;
+        // AIの手が準備できたら適用
+        if (ai_move_ready.load()) {
+            std::lock_guard<std::mutex> lock(ai_mutex);
+            if (ai_move.mino_index == MINO_IDX_PASS) {
+                board.history[current_player].push_back(ai_move);
+                consecutive_passes++;
+            } else {
+                board.put_mino(current_player, ai_move);
+                consecutive_passes = 0;
             }
+            current_player = (current_player + 1) % N_PLAYERS;
+            ai_move_ready.store(false);
         }
 
         // ======== 描画 ========
@@ -327,12 +348,16 @@ void Main() {
         if (game_over) {
             turnText = U"ゲーム終了";
         } else if (is_ai[current_player]) {
-            turnText += U" (AI)";
+            if (ai_thinking.load()) {
+                turnText += U" (AI思考中...)";
+            } else {
+                turnText += U" (AI)";
+            }
         }
         font(turnText).draw(50, 50, PlayerColors[current_player]);
         
         // パスボタン（プレイヤー表示の右側）
-        if (!game_over && !is_ai[current_player] && !ai_thinking) {
+        if (!game_over && !is_ai[current_player] && !ai_thinking.load()) {
             if (SimpleGUI::Button(U"パス", Vec2(400, 45), 100)) {
                 Move pass_move = {-1, -1, MINO_IDX_PASS};
                 board.history[current_player].push_back(pass_move);
@@ -376,7 +401,7 @@ void Main() {
         }
 
         // マウスホバー時のミノプレビュー（人間プレイヤーの手番のみ）
-        if (!game_over && !is_ai[current_player] && selected_mino_index >= 0 && !ai_thinking) {
+        if (!game_over && !is_ai[current_player] && selected_mino_index >= 0 && !ai_thinking.load()) {
             Vec2 mousePos = Cursor::Pos();
             const Mino& mino = board.players[current_player].minos[selected_mino_index];
             
@@ -476,7 +501,7 @@ void Main() {
         }
 
         // 左側に現在のプレイヤーの残りミノを表示
-        if (!game_over && !ai_thinking) {
+        if (!game_over && !ai_thinking.load()) {
             double minoListX = 50;
             double minoListY = 150;
             smallFont(U"残りのミノ (クリックで選択)").draw(minoListX, minoListY - 30, Color(50, 50, 50));
@@ -595,7 +620,8 @@ void Main() {
                     // 復元成功
                     consecutive_passes = 0;
                     game_over = false;
-                    ai_thinking = false;
+                    ai_thinking.store(false);
+                    ai_move_ready.store(false);
                     selected_mino_index = -1;
                     selected_unique_mino_idx = -1;
                 } else {
@@ -626,6 +652,12 @@ void Main() {
             String winnerText = U"勝者: プレイヤー {} (スコア: {})"_fmt(winner, best_score);
             font(winnerText).drawAt(800, 450, PlayerColors[winner]);
         }
+    }
+    
+    // メインループ終了時、AIスレッドが動いていたらjoin
+    if (ai_thread.joinable()) {
+        ai_thinking.store(false);
+        ai_thread.join();
     }
 }
 
