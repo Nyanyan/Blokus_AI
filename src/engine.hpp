@@ -30,10 +30,11 @@ struct Node {
     Node* parent;
     std::vector<std::unique_ptr<Node>> children;
     
-    int visit_count;
-    double total_value;
+    std::atomic<int> visit_count;
+    std::atomic<double> total_value;
     bool is_fully_expanded;
     std::vector<Move> untried_moves;
+    std::mutex node_mutex;  // このノードへのアクセスを保護するミューテックス
     
     Node(const Board& b, int current_pid, int target_pid, Node* p = nullptr, Move m = {-1, -1, MINO_IDX_PASS}) 
         : board(b), current_player_id(current_pid), target_player_id(target_pid), move(m), 
@@ -47,11 +48,13 @@ struct Node {
     }
     
     double ucb1(double exploration_param = 1.41) const {
-        if (visit_count == 0) {
+        int visits = visit_count.load();
+        if (visits == 0) {
             return std::numeric_limits<double>::infinity();
         }
-        double exploitation = total_value / visit_count;
-        double exploration = exploration_param * std::sqrt(std::log(parent->visit_count) / visit_count);
+        double total = total_value.load();
+        double exploitation = total / visits;
+        double exploration = exploration_param * std::sqrt(std::log(parent->visit_count.load()) / visits);
         return exploitation + exploration;
     }
     
@@ -110,7 +113,7 @@ std::unique_ptr<Node> global_mcts_root = nullptr;
 
 Move get_best_move_mcts(Board& board, int player_id) {
     const int max_simulation_count = 10000; // 最大シミュレーション回数
-    const uint64_t time_limit_ms = 30000; // 時間制限（30秒）
+    const uint64_t time_limit_ms = 20000; // 時間制限（20秒）
     const double exploration_param = 1.41; // UCB1の探索パラメータ
     const int num_threads = std::thread::hardware_concurrency(); // スレッド数（CPUコア数）
     
@@ -160,8 +163,25 @@ Move get_best_move_mcts(Board& board, int player_id) {
             
             // 1. Selection: UCB1で葉ノードまで選択
             Node* node = thread_root;
-            while (!node->is_terminal() && node->untried_moves.empty() && !node->children.empty()) {
-                // 最もUCB1値が高い子を選択
+            while (true) {
+                if (node->is_terminal()) {
+                    break;
+                }
+                
+                // ノードをロックして状態を確認
+                std::lock_guard<std::mutex> lock(node->node_mutex);
+                
+                // 未試行の手があればExpansionへ
+                if (!node->untried_moves.empty()) {
+                    break;
+                }
+                
+                // 子がなければループを抜ける
+                if (node->children.empty()) {
+                    break;
+                }
+                
+                // 最もUCB1値が高い子を選択（ロック解除後に進む）
                 Node* best_child = nullptr;
                 double best_ucb = -std::numeric_limits<double>::infinity();
                 for (auto& child : node->children) {
@@ -174,20 +194,29 @@ Move get_best_move_mcts(Board& board, int player_id) {
                 node = best_child;
             }
             
-            // 2. Expansion: 未試行の手があれば子ノードを追加
-            if (!node->untried_moves.empty() && !node->is_terminal()) {
-                Move move = node->untried_moves.back();
-                node->untried_moves.pop_back();
-                
-                Board new_board = node->board;
-                if (move.mino_index != MINO_IDX_PASS) {
-                    new_board.put_mino(node->current_player_id, move);
+            // 2. Expansion: 未試行の手があれば子ノードを追加（ロック内で実行）
+            Node* new_node = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(node->node_mutex);
+                if (!node->untried_moves.empty() && !node->is_terminal()) {
+                    Move move = node->untried_moves.back();
+                    node->untried_moves.pop_back();
+                    
+                    Board new_board = node->board;
+                    if (move.mino_index != MINO_IDX_PASS) {
+                        new_board.put_mino(node->current_player_id, move);
+                    }
+                    int next_player = (node->current_player_id + 1) % N_PLAYERS;
+                    
+                    node->children.push_back(std::make_unique<Node>(new_board, next_player, player_id, node, move));
+                    new_node = node->children.back().get();
+                    local_expanded++;
                 }
-                int next_player = (node->current_player_id + 1) % N_PLAYERS;
-                
-                node->children.push_back(std::make_unique<Node>(new_board, next_player, player_id, node, move));
-                node = node->children.back().get();
-                local_expanded++;
+            }
+            
+            // 新しいノードが作成された場合はそれを使用
+            if (new_node != nullptr) {
+                node = new_node;
             }
             
             // 3. Simulation: ランダムプレイアウト
@@ -195,10 +224,14 @@ Move get_best_move_mcts(Board& board, int player_id) {
             sim_board.random_playout(node->current_player_id);
             double score = sim_board.calculate_mcts_score(player_id);
             
-            // 4. Backpropagation: 結果を親ノードへ伝播
+            // 4. Backpropagation: 結果を親ノードへ伝播（アトミック操作で安全）
             while (node != nullptr) {
-                node->visit_count++;
-                node->total_value += score;
+                node->visit_count.fetch_add(1);
+                // double型のアトミック加算（load + store）
+                double old_value = node->total_value.load();
+                while (!node->total_value.compare_exchange_weak(old_value, old_value + score)) {
+                    // compare_exchange_weakが失敗した場合は再試行
+                }
                 node = node->parent;
             }
             
@@ -210,13 +243,15 @@ Move get_best_move_mcts(Board& board, int player_id) {
                 std::lock_guard<std::mutex> lock(display_mutex);
                 std::vector<std::pair<Node*, double>> child_stats;
                 for (auto& child : thread_root->children) {
-                    double avg_value = child->visit_count > 0 ? child->total_value / child->visit_count : 0.0;
+                    int visits = child->visit_count.load();
+                    double total_val = child->total_value.load();
+                    double avg_value = visits > 0 ? total_val / visits : 0.0;
                     child_stats.push_back({child.get(), avg_value});
                 }
                 
                 // 訪問回数でソート
                 std::sort(child_stats.begin(), child_stats.end(), 
-                    [](const auto& a, const auto& b) { return a.first->visit_count > b.first->visit_count; });
+                    [](const auto& a, const auto& b) { return a.first->visit_count.load() > b.first->visit_count.load(); });
                 
                 std::cerr << "Playouts: " << current_total << ", Expanded nodes: " << total_expanded_nodes.load() << " - Top 3 moves:\n";
                 for (int j = 0; j < std::min(3, static_cast<int>(child_stats.size())); ++j) {
@@ -224,7 +259,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
                     double avg_value = child_stats[j].second;
                     std::cerr << "  #" << (j + 1) << ": pos=" << child->move.pos 
                               << " mino=" << child->move.mino_index 
-                              << " visits=" << child->visit_count 
+                              << " visits=" << child->visit_count.load() 
                               << " avg_value=" << avg_value << "\n";
                 }
             }
@@ -255,8 +290,9 @@ Move get_best_move_mcts(Board& board, int player_id) {
     Node* best_child = nullptr;
     int max_visits = -1;
     for (auto& child : root->children) {
-        if (child->visit_count > max_visits) {
-            max_visits = child->visit_count;
+        int visits = child->visit_count.load();
+        if (visits > max_visits) {
+            max_visits = visits;
             best_child = child.get();
         }
     }
@@ -269,9 +305,11 @@ Move get_best_move_mcts(Board& board, int player_id) {
         return {-1, -1, MINO_IDX_PASS};
     }
     
-    double avg_value = best_child->total_value / best_child->visit_count;
+    double total_val = best_child->total_value.load();
+    int visits = best_child->visit_count.load();
+    double avg_value = total_val / visits;
     std::cerr << "Best move: pos " << best_child->move.pos << " mino " << best_child->move.mino_index 
-              << " (visits: " << best_child->visit_count << ", avg_value: " << avg_value << ") "
+              << " (visits: " << visits << ", avg_value: " << avg_value << ") "
               << "Total playouts: " << final_playouts << ", Expanded nodes: " << final_expanded 
               << ", Elapsed " << elapsed << " ms (" << (elapsed * 1000 / final_playouts) << " us/playout)\n";
     
@@ -290,7 +328,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
     if (next_root) {
         next_root->parent = nullptr; // 親ポインタをクリア
         global_mcts_root = std::move(next_root);
-        std::cerr << "Saved MCTS tree for next turn (visits: " << global_mcts_root->visit_count << ")\n";
+        std::cerr << "Saved MCTS tree for next turn (visits: " << global_mcts_root->visit_count.load() << ")\n";
     } else {
         global_mcts_root = nullptr;
     }
