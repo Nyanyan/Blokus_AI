@@ -106,10 +106,11 @@ Move get_best_move_mc(Board& board, int player_id) {
 std::unique_ptr<Node> global_mcts_root = nullptr;
 
 Move get_best_move_mcts(Board& board, int player_id) {
-    const int simulation_count = 500; // シミュレーション回数
+    const int max_simulation_count = 2000; // 最大シミュレーション回数
+    const uint64_t time_limit_ms = 30000; // 時間制限（30秒）
     const double exploration_param = 1.41; // UCB1の探索パラメータ
     
-    std::cerr << "Starting MCTS for Player " << player_id << " with " << simulation_count << " simulations...\n";
+    std::cerr << "Starting MCTS for Player " << player_id << " (max " << max_simulation_count << " playouts or " << time_limit_ms << " ms)...\n";
     uint64_t start_time = tim();
     
     // グローバルツリーから現在の盤面に対応するノードを探す
@@ -131,8 +132,17 @@ Move get_best_move_mcts(Board& board, int player_id) {
         root = root_ptr.get();
     }
     
-    // MCTSのメインループ
-    for (int i = 0; i < simulation_count; ++i) {
+    int expanded_nodes = 0; // 展開したノード数
+    int i = 0; // シミュレーション回数
+    
+    // MCTSのメインループ（2000回または30秒まで）
+    for (i = 0; i < max_simulation_count; ++i) {
+        // 時間制限チェック
+        if (tim() - start_time >= time_limit_ms) {
+            std::cerr << "Time limit reached. Stopping at " << (i + 1) << " playouts.\n";
+            break;
+        }
+        
         // 1. Selection: UCB1で葉ノードまで選択
         Node* node = root;
         while (!node->is_terminal() && node->untried_moves.empty() && !node->children.empty()) {
@@ -162,6 +172,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
             
             node->children.push_back(std::make_unique<Node>(new_board, next_player, player_id, node, move));
             node = node->children.back().get();
+            expanded_nodes++; // 展開ノード数をカウント
         }
         
         // 3. Simulation: ランダムプレイアウト
@@ -176,7 +187,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
             node = node->parent;
         }
         
-        // 50トライごとに上位3手を表示
+        // 50プレイアウトごとに上位3手を表示
         if ((i + 1) % 50 == 0) {
             std::vector<std::pair<Node*, double>> child_stats;
             for (auto& child : root->children) {
@@ -188,7 +199,7 @@ Move get_best_move_mcts(Board& board, int player_id) {
             std::sort(child_stats.begin(), child_stats.end(), 
                 [](const auto& a, const auto& b) { return a.first->visit_count > b.first->visit_count; });
             
-            std::cerr << "After " << (i + 1) << " simulations - Top 3 moves:\n";
+            std::cerr << "Playouts: " << (i + 1) << ", Expanded nodes: " << expanded_nodes << " - Top 3 moves:\n";
             for (int j = 0; j < std::min(3, static_cast<int>(child_stats.size())); ++j) {
                 Node* child = child_stats[j].first;
                 double avg_value = child_stats[j].second;
@@ -221,7 +232,8 @@ Move get_best_move_mcts(Board& board, int player_id) {
     double avg_value = best_child->total_value / best_child->visit_count;
     std::cerr << "Best move: pos " << best_child->move.pos << " mino " << best_child->move.mino_index 
               << " (visits: " << best_child->visit_count << ", avg_value: " << avg_value << ") "
-              << "Elapsed " << elapsed << " ms (" << (elapsed * 1000 / simulation_count) << " us/simulation)\n";
+              << "Total playouts: " << (i + 1) << ", Expanded nodes: " << expanded_nodes 
+              << ", Elapsed " << elapsed << " ms (" << (elapsed * 1000 / (i + 1)) << " us/playout)\n";
     
     Move result_move = best_child->move;
     
